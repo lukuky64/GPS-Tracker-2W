@@ -1,0 +1,2 @@
+# GPS-Tracker-2W
+RP2040 + E22-900T33S + SAM-M10Q
