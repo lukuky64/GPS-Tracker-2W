@@ -1,0 +1,10 @@
+1. Compile code in PlatformIO.
+2.  Locate the .uf2 file: <.pio/build/your_env/firmware.uf2>.
+3. Hold BOOTSEL, plug in USB → RPI-RP2 shows up.
+4. Drag and drop the .uf2 file onto it.
+
+OR
+
+1. Use picotool via PlatformIO <upload_protocol = picotool>.
+2. Put RP2040 into BOOTSEL mode manually.
+3. Upload (PlatformIO will upload using picotool).
