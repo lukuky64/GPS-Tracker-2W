@@ -3,14 +3,7 @@
 #include <Arduino.h>
 #include <SparkFun_u-blox_GNSS_v3.h>
 
-struct GPS_Data {
-  int32_t latitude;
-  int32_t longitude;
-  int32_t altitude;
-  uint8_t hour;
-  uint8_t minute;
-  uint8_t second;
-};
+#include "messages.hpp"
 
 class GPS_Talker {
  public:
@@ -36,6 +29,9 @@ class GPS_Talker {
 
   GPS_Data* getData();
 
+  void setupLED(uint8_t ledPin);
+  void toggleLED(uint8_t ledPin);
+
  private:
   SFE_UBLOX_GNSS_SERIAL m_GPS_Module;  // SFE_UBLOX_GNSS_SERIAL uses Serial (UART). For I2C or SPI, see Example1 and Example3
   HardwareSerial& m_GPS_Serial;
@@ -49,8 +45,7 @@ class GPS_Talker {
   static GPS_Talker* m_instance;
 
   volatile bool m_newData;
-  volatile bool m_timePulseFlag;  // Flag set by time pulse interrupt
-  GPS_Data m_gpsData;             // Structure to hold GPS data
+  GPS_Data m_gpsData;  // Structure to hold GPS data
 
   bool m_initialised;
 };

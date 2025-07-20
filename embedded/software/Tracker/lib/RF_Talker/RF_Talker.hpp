@@ -3,11 +3,13 @@
 #include <Arduino.h>
 
 #include "LoRa_E22.h"
-#include "msgStruct.hpp"
+#include "messages.hpp"
+
+#define FREQUENCY_915
 
 class RF_Talker {
  public:
-  RF_Talker(HardwareSerial& serial, uint8_t ctrl0Pin = 255, uint8_t ctrl1Pin = 255, uint8_t statusPin = 255);
+  RF_Talker(HardwareSerial& serial, uint8_t ctrl0Pin = 255, uint8_t ctrl1Pin = 255, uint8_t statusPin = 255, uint8_t ledPin = 255);
 
   bool begin();
 
@@ -18,12 +20,16 @@ class RF_Talker {
 
   bool receiveMessage(ResponseContainer& response);
 
+  void setupLED(uint8_t ledPin);
+  void toggleLED(uint8_t ledPin);
+
  private:
   LoRa_E22* m_e22Module;
   HardwareSerial& m_RF_Serial;
   uint8_t m_ctrl0Pin;
   uint8_t m_ctrl1Pin;
   uint8_t m_statusPin;
+  uint8_t m_LED_Pin;
 
   struct RF_Config {
     byte m_ADDH;

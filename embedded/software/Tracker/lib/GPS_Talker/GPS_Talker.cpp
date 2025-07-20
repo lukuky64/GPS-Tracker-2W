@@ -2,7 +2,7 @@
 
 GPS_Talker* GPS_Talker::m_instance = nullptr;  // Initialize static member
 
-GPS_Talker::GPS_Talker(HardwareSerial& serial, uint8_t nrstPin, uint8_t timePulsePin, uint8_t ledPin) : m_GPS_Serial(serial), m_nRST_Pin(nrstPin), m_timePulse_Pin(timePulsePin), m_LED_Pin(ledPin), m_newData(false), m_timePulseFlag(false), m_initialised(false) { m_instance = this; }
+GPS_Talker::GPS_Talker(HardwareSerial& serial, uint8_t nrstPin, uint8_t timePulsePin, uint8_t ledPin) : m_GPS_Serial(serial), m_nRST_Pin(nrstPin), m_timePulse_Pin(timePulsePin), m_LED_Pin(ledPin), m_newData(false), m_initialised(false) { m_instance = this; }
 
 bool GPS_Talker::begin(unsigned long baudRate, uint8_t navFreq) {
   m_baudRate = baudRate;
@@ -13,17 +13,11 @@ bool GPS_Talker::begin(unsigned long baudRate, uint8_t navFreq) {
 
   pinMode(m_timePulse_Pin, INPUT);  // Set the time pulse pin as input
 
-  // setup indication ISR for time pulse
-  {
-    if (m_LED_Pin != 255) {
-      pinMode(m_LED_Pin, OUTPUT);
-      digitalWrite(m_LED_Pin, LOW);  // Start with LED off
-    }
+  setupLED(m_LED_Pin);  // Setup LED if configured
 
-    if (m_timePulse_Pin != 255) {
-      // Attach interrupt for time pulse pin (rising edge)
-      attachInterrupt(digitalPinToInterrupt(m_timePulse_Pin), timePulseISR, RISING);
-    }
+  if (m_timePulse_Pin != 255) {
+    // Attach interrupt for time pulse pin (rising edge)
+    attachInterrupt(digitalPinToInterrupt(m_timePulse_Pin), timePulseISR, RISING);
   }
 
   m_GPS_Serial.begin(m_baudRate);
@@ -57,12 +51,7 @@ void GPS_Talker::PVTCallback(UBX_NAV_PVT_data_t* ubxDataStruct) {
 
 void GPS_Talker::timePulseISR() {
   if (m_instance) {
-    m_instance->m_timePulseFlag = true;  // Set the time pulse flag
-
-    // Turn on LED if pin is configured
-    if (m_instance->m_LED_Pin != 255) {
-      digitalWrite(m_instance->m_LED_Pin, !digitalRead(m_instance->m_LED_Pin));  // Turn LED on
-    }
+    m_instance->toggleLED(m_instance->m_LED_Pin);  // Toggle the LED if it is configured
   }
 }
 
@@ -90,4 +79,17 @@ bool GPS_Talker::checkNewData() {
 GPS_Data* GPS_Talker::getData() {
   m_newData = false;
   return &m_gpsData;  // Return last data
+}
+
+void GPS_Talker::setupLED(uint8_t ledPin) {
+  if (ledPin != 255) {
+    pinMode(ledPin, OUTPUT);
+    digitalWrite(ledPin, LOW);  // Start with LED off
+  }
+}
+
+void GPS_Talker::toggleLED(uint8_t ledPin) {
+  if (ledPin != 255) {
+    digitalWrite(ledPin, !digitalRead(ledPin));
+  }
 }

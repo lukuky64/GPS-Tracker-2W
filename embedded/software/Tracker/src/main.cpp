@@ -1,61 +1,35 @@
 #include <Arduino.h>
+#include <FreeRTOS.h>
+#include <HardwareSerial.h>
+#include <task.h>
 
 #include "BattMonitor.hpp"
 #include "GPS_Talker.hpp"
 #include "RF_Talker.hpp"
 #include "definitions.hpp"
+#include "messages.hpp"
+
+// UART UART_RF(UART_RF_TX, UART_RF_RX);
+// UART UART_GPS(UART_GPS_TX, UART_GPS_RX);
 
 GPS_Talker gpsTalker(UART_GPS, GPS_NRST, GPS_TIMEPULSE, LED1_PIN);
-
 RF_Talker rfTalker(UART_RF, RF_CTRL0, RF_CTRL1, RF_STATUS);
-
 BattMonitor batteryMonitor(VBAT_SENSE, BATT_SCALE_FACTOR);
-
-MSG_PACKET *packData(GPS_Data *gps) {
-  MSG_PACKET *packet = (MSG_PACKET *)malloc(sizeof(MSG_PACKET));
-  // float voltage = batteryMonitor.getScaledVoltage(10);
-  memcpy(packet->latitude, &gps->latitude, 4);
-  memcpy(packet->longitude, &gps->longitude, 4);
-  memcpy(packet->altitude, &gps->altitude, 4);
-  return packet;
-}
-
-MSG_PACKET *unpackData(ResponseContainer &response) {
-  MSG_PACKET *unpackedData = (MSG_PACKET *)malloc(sizeof(MSG_PACKET));
-
-  memcpy(unpackedData, response.data.c_str(), sizeof(MSG_PACKET));
-
-  return unpackedData;
-}
-
-GPS_Data *unpackData(MSG_PACKET *msgPacket) {
-  GPS_Data *gpsData = (GPS_Data *)malloc(sizeof(GPS_Data));
-
-  gpsData->latitude = *(int32_t *)(msgPacket->latitude);
-  gpsData->longitude = *(int32_t *)(msgPacket->longitude);
-  gpsData->altitude = *(int32_t *)(msgPacket->altitude);
-
-  return gpsData;
-}
-
-void printGPSData(GPS_Data *gpsData) {
-  UART_USB.print(F("Latitude: "));
-  UART_USB.print(*(int32_t *)(gpsData->latitude) / 1e7f);
-  UART_USB.print(F("\t"));
-  UART_USB.print(F("Longitude: "));
-  UART_USB.print(*(int32_t *)(gpsData->longitude) / 1e7f);
-  UART_USB.print(F("\t"));
-  UART_USB.print(F("Altitude: "));
-  UART_USB.println(*(int32_t *)(gpsData->altitude) / 1e7f);
-}
 
 void setup() {
   bool success = false;
   UART_USB.begin(115200);
 
+  UART_RF.setRX(UART_RF_RX);
+  UART_RF.setTX(UART_RF_TX);
+
+  UART_GPS.setRX(UART_GPS_RX);
+  UART_GPS.setTX(UART_GPS_TX);
+
   batteryMonitor.init();
 
   while (!success) {
+    // TODO: We could collect samples at a higher rate and average them
     if (!gpsTalker.begin(GPS_BAUD_RATE, GPS_NAV_FREQ)) {
       UART_USB.println(F("GPS initialisation failed! Trying again..."));
       gpsTalker.hardwareReset();  // Reset the GPS module
