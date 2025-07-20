@@ -76,7 +76,7 @@ int32_t GPS_Talker::getAltitude() {
 
 void GPS_Talker::hardwareReset() {
   digitalWrite(m_nRST_Pin, LOW);  // active LOW reset
-  delay(100);                     // FIXME: This is arbitrary
+  delay(100);                     // TODO: This is arbitrary
   digitalWrite(m_nRST_Pin, HIGH);
 }
 

@@ -1,31 +1,79 @@
 #include <Arduino.h>
 
+#include "BattMonitor.hpp"
 #include "GPS_Talker.hpp"
+#include "RF_Talker.hpp"
 #include "definitions.hpp"
-
-// UART Mapping for RP2040:
-// Serial1 -> UART0 -> Pins 12(TX)/13(RX) -> Used for RF Module
-// Serial2 -> UART1 -> Pins 20(TX)/21(RX) -> Used for GPS Module
 
 GPS_Talker gpsTalker(UART_GPS, GPS_NRST, GPS_TIMEPULSE, LED1_PIN);
 
-GPS_Data *gpsData = nullptr;
+RF_Talker rfTalker(UART_RF, RF_CTRL0, RF_CTRL1, RF_STATUS);
 
-unsigned long previousMillis = 0;
-unsigned long intervalMillis = 500;
+BattMonitor batteryMonitor(VBAT_SENSE, BATT_SCALE_FACTOR);
+
+MSG_PACKET *packData(GPS_Data *gps) {
+  MSG_PACKET *packet = (MSG_PACKET *)malloc(sizeof(MSG_PACKET));
+  // float voltage = batteryMonitor.getScaledVoltage(10);
+  memcpy(packet->latitude, &gps->latitude, 4);
+  memcpy(packet->longitude, &gps->longitude, 4);
+  memcpy(packet->altitude, &gps->altitude, 4);
+  return packet;
+}
+
+MSG_PACKET *unpackData(ResponseContainer &response) {
+  MSG_PACKET *unpackedData = (MSG_PACKET *)malloc(sizeof(MSG_PACKET));
+
+  memcpy(unpackedData, response.data.c_str(), sizeof(MSG_PACKET));
+
+  return unpackedData;
+}
+
+GPS_Data *unpackData(MSG_PACKET *msgPacket) {
+  GPS_Data *gpsData = (GPS_Data *)malloc(sizeof(GPS_Data));
+
+  gpsData->latitude = *(int32_t *)(msgPacket->latitude);
+  gpsData->longitude = *(int32_t *)(msgPacket->longitude);
+  gpsData->altitude = *(int32_t *)(msgPacket->altitude);
+
+  return gpsData;
+}
+
+void printGPSData(GPS_Data *gpsData) {
+  UART_USB.print(F("Latitude: "));
+  UART_USB.print(*(int32_t *)(gpsData->latitude) / 1e7f);
+  UART_USB.print(F("\t"));
+  UART_USB.print(F("Longitude: "));
+  UART_USB.print(*(int32_t *)(gpsData->longitude) / 1e7f);
+  UART_USB.print(F("\t"));
+  UART_USB.print(F("Altitude: "));
+  UART_USB.println(*(int32_t *)(gpsData->altitude) / 1e7f);
+}
 
 void setup() {
   bool success = false;
   UART_USB.begin(115200);
-  UART_USB.println("Attempting to initialise GPS...");
+
+  batteryMonitor.init();
 
   while (!success) {
     if (!gpsTalker.begin(GPS_BAUD_RATE, GPS_NAV_FREQ)) {
-      UART_USB.println("GPS initialisation failed! Trying again...");
+      UART_USB.println(F("GPS initialisation failed! Trying again..."));
       gpsTalker.hardwareReset();  // Reset the GPS module
       delay(500);
     } else {
-      UART_USB.println("GPS initialised successfully!");
+      UART_USB.println(F("GPS initialised successfully!"));
+      success = true;
+    }
+  }
+
+  success = false;
+  while (!success) {
+    if (!rfTalker.begin()) {
+      UART_USB.println(F("RF initialisation failed! Trying again..."));
+      gpsTalker.hardwareReset();  // Reset the GPS module
+      delay(500);
+    } else {
+      UART_USB.println(F("RF initialised successfully!"));
       success = true;
     }
   }
@@ -33,16 +81,38 @@ void setup() {
 
 void loop() {
   if (gpsTalker.checkNewData()) {
-    gpsData = gpsTalker.getData();
+    GPS_Data *gpsData = gpsTalker.getData();
     // Print GPS data to USB Serial
-    UART_USB.print("Latitude: ");
-    UART_USB.print(gpsData->latitude);
-    UART_USB.print("\t");
-    UART_USB.print("Longitude: ");
-    UART_USB.print(gpsData->longitude);
-    UART_USB.print("\t");
-    UART_USB.print("Altitude: ");
-    UART_USB.println(gpsData->altitude);
+    UART_USB.print(F("This GPS Data: "));
+    printGPSData(gpsData);
+
+#ifdef BROADCASTER
+    MSG_PACKET *msgPacket = packData(gpsData);
+    // Send the packed data via RF
+    if (rfTalker.sendMessage(msgPacket)) {
+      UART_USB.println(F("RF message sent successfully!"));
+    } else {
+      UART_USB.println(F("Failed to send RF message."));
+    }
+    free(msgPacket);
+#endif
+    free(gpsData);
   }
+
+#ifndef BROADCASTER
+  if (rfTalker.available()) {
+    ResponseContainer response;
+    if (rfTalker.receiveMessage(response)) {
+      MSG_PACKET *unpackedData = unpackData(response);
+      GPS_Data *gpsData = unpackData(unpackedData);
+
+      UART_USB.print(F("Received RF Data: "));
+      printGPSData(gpsData);
+
+      free(unpackedData);
+      free(gpsData);
+    }
+  }
+#endif
   delay(10);
 }

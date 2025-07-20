@@ -3,23 +3,31 @@
 #include <Arduino.h>
 
 #include "LoRa_E22.h"
+#include "msgStruct.hpp"
 
 class RF_Talker {
  public:
-  RF_Talker(HardwareSerial& serial, uint8_t ctrl0Pin, uint8_t ctrl1Pin, uint8_t statusPin);
+  RF_Talker(HardwareSerial& serial, uint8_t ctrl0Pin = 255, uint8_t ctrl1Pin = 255, uint8_t statusPin = 255);
 
-  bool begin(unsigned long baudRate = 9600);
+  bool begin();
 
-  ResponseStatus sendFixedMessage(uint8_t channel, uint8_t destinationAddL, uint8_t length, const String& message);
-
-  ResponseContainer receiveMessage();
+  // ResponseStatus sendFixedMessage(uint8_t channel, uint8_t destinationAddL, uint8_t length, const String& message);
+  bool sendMessage(const void* message);
 
   bool available();
 
+  bool receiveMessage(ResponseContainer& response);
+
  private:
-  LoRa_E22 m_e22Module;
+  LoRa_E22* m_e22Module;
   HardwareSerial& m_RF_Serial;
   uint8_t m_ctrl0Pin;
   uint8_t m_ctrl1Pin;
   uint8_t m_statusPin;
+
+  struct RF_Config {
+    byte m_ADDH;
+    byte m_ADDL;
+    byte m_CHAN;
+  } m_rfConfig;
 };

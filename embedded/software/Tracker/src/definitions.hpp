@@ -4,7 +4,6 @@
 
 // -------------------- PORT MAPPING --------------------
 
-#define UART_USB Serial
 #define UART_GPS Serial2  // Changed to Serial2 for UART1 (pins 20/21)
 #define UART_RF Serial1   // Changed to Serial1 for UART0 (pins 12/13)
 
@@ -34,3 +33,6 @@
 // -------------------- CONST DEFINITIONS --------------------
 #define GPS_BAUD_RATE 38400  // Default baud rate for u-blox M10 module
 #define GPS_NAV_FREQ 2       // Default navigation frequency (2 Hz)
+
+// TODO: Calibrate this
+#define BATT_SCALE_FACTOR 2.8f  // Voltage divider scaling.
