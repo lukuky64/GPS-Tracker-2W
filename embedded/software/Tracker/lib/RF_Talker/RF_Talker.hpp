@@ -20,6 +20,10 @@ class RF_Talker {
 
   bool receiveMessage(ResponseContainer& response);
 
+  int8_t getRFPower() const { return m_rfPower; }
+  int8_t setRFPower(int8_t power);
+  int mapRFPower(int8_t& power);
+
   void setupLED(uint8_t ledPin);
   void toggleLED(uint8_t ledPin);
 
@@ -30,6 +34,8 @@ class RF_Talker {
   uint8_t m_ctrl1Pin;
   uint8_t m_statusPin;
   uint8_t m_LED_Pin;
+
+  int8_t m_rfPower;  // RF power level (dB)
 
   struct RF_Config {
     byte m_ADDH;

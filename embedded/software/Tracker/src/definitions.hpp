@@ -32,9 +32,12 @@
 
 // -------------------- CONST DEFINITIONS --------------------
 #define GPS_BAUD_RATE 38400  // Default baud rate for u-blox M10 module
-#define GPS_NAV_FREQ 1       // Navigation frequency (1 Hz)
+#define GPS_NAV_FREQ 5       // Navigation frequency
 
-#define RF_BAUD_RATE 9600  // Default baud rate for RF module
+#define RF_BAUD_RATE 9600      // Default baud rate for RF module
+#define RF_BROADCAST_FREQ 0.2  // Broadcast frequency
+
+#define ALTITUDE_THRESHOLD 200  // Altitude threshold in meters for rocket state detection
 
 // TODO: Calibrate this
 #define BATT_SCALE_FACTOR 2.8f  // Voltage divider scaling.

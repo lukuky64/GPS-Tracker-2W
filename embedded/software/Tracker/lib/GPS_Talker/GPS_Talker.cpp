@@ -76,9 +76,9 @@ bool GPS_Talker::checkNewData() {
   return m_newData;               // Return true if new data is available
 }
 
-GPS_Data* GPS_Talker::getData() {
+GPS_DATA GPS_Talker::getData() {
   m_newData = false;
-  return &m_gpsData;  // Return last data
+  return m_gpsData;  // Return last data
 }
 
 void GPS_Talker::setupLED(uint8_t ledPin) {

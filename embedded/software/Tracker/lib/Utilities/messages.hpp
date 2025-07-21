@@ -9,9 +9,11 @@ struct MSG_PACKET {
   byte latitude[4];
   byte longitude[4];
   byte altitude[4];
+  byte batteryVoltage[1];
+  byte rfPower[1];
 };
 
-struct GPS_Data {
+struct GPS_DATA {
   int32_t latitude;
   int32_t longitude;
   int32_t altitude;
@@ -20,7 +22,13 @@ struct GPS_Data {
   uint8_t second;
 };
 
-MSG_PACKET *packData(GPS_Data *gps);
-MSG_PACKET *unpackData(ResponseContainer &response);
-GPS_Data *unpackData(MSG_PACKET *msgPacket);
-void printGPSData(GPS_Data *gpsData);
+struct SYS_DATA {
+  float batteryVoltage;
+  int8_t rfPower;
+};
+
+void packData(MSG_PACKET *packet, const GPS_DATA *gps, const SYS_DATA *sysData);
+void unpackResponseData(MSG_PACKET *packet, const ResponseContainer &response);
+void unpackGPSData(GPS_DATA *gpsData, const MSG_PACKET *msgPacket);
+void unpackSYSData(SYS_DATA *sysData, const MSG_PACKET *msgPacket);
+void printGPSData(const GPS_DATA *gpsData);

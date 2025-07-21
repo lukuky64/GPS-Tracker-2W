@@ -27,7 +27,7 @@ class GPS_Talker {
 
   bool checkTimePulse();  // Check if time pulse event occurred
 
-  GPS_Data* getData();
+  GPS_DATA getData();
 
   void setupLED(uint8_t ledPin);
   void toggleLED(uint8_t ledPin);
@@ -45,7 +45,7 @@ class GPS_Talker {
   static GPS_Talker* m_instance;
 
   volatile bool m_newData;
-  GPS_Data m_gpsData;  // Structure to hold GPS data
+  GPS_DATA m_gpsData;  // Structure to hold GPS data
 
   bool m_initialised;
 };
