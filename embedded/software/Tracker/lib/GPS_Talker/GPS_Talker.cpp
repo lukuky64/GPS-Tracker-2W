@@ -36,9 +36,9 @@ bool GPS_Talker::begin(unsigned long baudRate, uint8_t navFreq) {
 
 void GPS_Talker::PVTCallback(UBX_NAV_PVT_data_t* ubxDataStruct) {
   if (ubxDataStruct->flags.bits.gnssFixOK == 1) {
-    m_instance->m_gpsData.latitude = ubxDataStruct->lat;   // Latitude in degrees * 1e-7
-    m_instance->m_gpsData.longitude = ubxDataStruct->lon;  // Longitude in degrees * 1e-7
-    m_instance->m_gpsData.altitude = ubxDataStruct->hMSL;  // Altitude above Mean Sea Level in mm
+    m_instance->m_gpsData.latitude = ubxDataStruct->lat * 1e-7f;     // Latitude in degrees (float)
+    m_instance->m_gpsData.longitude = ubxDataStruct->lon * 1e-7f;    // Longitude in degrees (float)
+    m_instance->m_gpsData.altitude = ubxDataStruct->hMSL / 1000.0f;  // Altitude above Mean Sea Level in meters (float)
 
     // time in UTC
     m_instance->m_gpsData.hour = ubxDataStruct->hour;

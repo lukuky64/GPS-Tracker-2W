@@ -3,9 +3,8 @@
 
 RF_Talker::RF_Talker(HardwareSerial& serial, uint8_t ctrl0Pin, uint8_t ctrl1Pin, uint8_t statusPin, uint8_t ledPin) : m_RF_Serial(serial), m_ctrl0Pin(ctrl0Pin), m_ctrl1Pin(ctrl1Pin), m_statusPin(statusPin), m_LED_Pin(ledPin) {
   m_e22Module = new LoRa_E22(&m_RF_Serial, m_statusPin, m_ctrl0Pin, m_ctrl1Pin);
-  m_rfConfig = {0xFF, 0xFF, 83};  // Broadcast address and channel 83  (933MHz -> lowest return loss for antenna selected)
+  m_rfConfig = {0xFF, 0xFF, 83};  // Broadcast address and channel 83  (850 + 83 = 933MHz -> lowest return loss for antenna selected)
   m_rfPower = 10;                 // Default RF power level
-  // TODO: This isn't doing anything yet, need to implement setRFPower
 }
 
 bool RF_Talker::begin() {
@@ -19,7 +18,7 @@ bool RF_Talker::begin() {
 
     // TODO: Play with these settings for improved range
     configuration.OPTION.transmissionPower = mapRFPower(m_rfPower);  // POWER_22; We are using a 33dB module. POWER_22 will map to 33dB, I think
-    configuration.SPED.airDataRate = AIR_DATA_RATE_010_24;           // lower is better for long range
+    configuration.SPED.airDataRate = AIR_DATA_RATE_010_24;           // lower is better for long range. 2.4kbps
     ResponseStatus rs = m_e22Module->setConfiguration(configuration, WRITE_CFG_PWR_DWN_SAVE);
 
     if (rs.code != E22_SUCCESS) {
@@ -83,7 +82,7 @@ int8_t RF_Talker::setRFPower(int8_t power) {
 
   configuration.OPTION.transmissionPower = mapRFPower(m_rfPower);
 
-  ResponseStatus rs = m_e22Module->setConfiguration(configuration, WRITE_CFG_PWR_DWN_SAVE);
+  ResponseStatus rs = m_e22Module->setConfiguration(configuration, WRITE_CFG_PWR_DWN_SAVE);  // saving if powered down. probably good incase module has to be reset after lockout
 
   if (rs.code != E22_SUCCESS) {
     UART_USB.print("Error setting RF power: ");

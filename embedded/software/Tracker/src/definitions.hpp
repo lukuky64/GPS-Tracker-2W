@@ -31,8 +31,9 @@
 #define LED2_PIN 18
 
 // -------------------- CONST DEFINITIONS --------------------
-#define GPS_BAUD_RATE 38400  // Default baud rate for u-blox M10 module
-#define GPS_NAV_FREQ 5       // Navigation frequency
+#define GPS_BAUD_RATE 38400    // Default baud rate for u-blox M10 module
+#define GPS_UPDATE_FREQ 20     // GPS update frequency
+#define GPS_FILTER_ALPHA 0.1f  // Alpha value for exponential filter on GPS data
 
 #define RF_BAUD_RATE 9600      // Default baud rate for RF module
 #define RF_BROADCAST_FREQ 0.2  // Broadcast frequency

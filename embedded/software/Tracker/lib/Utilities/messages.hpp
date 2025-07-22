@@ -14,9 +14,9 @@ struct MSG_PACKET {
 };
 
 struct GPS_DATA {
-  int32_t latitude;
-  int32_t longitude;
-  int32_t altitude;
+  float latitude;   // Latitude in degrees (float)
+  float longitude;  // Longitude in degrees (float)
+  float altitude;   // Altitude above Mean Sea Level in meters (float)
   uint8_t hour;
   uint8_t minute;
   uint8_t second;
@@ -32,3 +32,4 @@ void unpackResponseData(MSG_PACKET *packet, const ResponseContainer &response);
 void unpackGPSData(GPS_DATA *gpsData, const MSG_PACKET *msgPacket);
 void unpackSYSData(SYS_DATA *sysData, const MSG_PACKET *msgPacket);
 void printGPSData(const GPS_DATA *gpsData);
+void printSYSData(const SYS_DATA *sysData);

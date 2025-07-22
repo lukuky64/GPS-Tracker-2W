@@ -14,9 +14,9 @@ void unpackResponseData(MSG_PACKET *packet, const ResponseContainer &response) {
 }
 
 void unpackGPSData(GPS_DATA *gpsData, const MSG_PACKET *msgPacket) {
-  gpsData->latitude = *(int32_t *)(msgPacket->latitude);
-  gpsData->longitude = *(int32_t *)(msgPacket->longitude);
-  gpsData->altitude = *(int32_t *)(msgPacket->altitude);
+  memcpy(&gpsData->latitude, msgPacket->latitude, sizeof(float));
+  memcpy(&gpsData->longitude, msgPacket->longitude, sizeof(float));
+  memcpy(&gpsData->altitude, msgPacket->altitude, sizeof(float));
 }
 
 void unpackSYSData(SYS_DATA *sysData, const MSG_PACKET *msgPacket) {
@@ -26,11 +26,19 @@ void unpackSYSData(SYS_DATA *sysData, const MSG_PACKET *msgPacket) {
 
 void printGPSData(const GPS_DATA *gpsData) {
   UART_USB.print(F("Latitude: "));
-  UART_USB.print(*(int32_t *)(gpsData->latitude) / 1e7f);
+  UART_USB.print((gpsData->latitude) / 1e7f);
   UART_USB.print(F("\t"));
   UART_USB.print(F("Longitude: "));
-  UART_USB.print(*(int32_t *)(gpsData->longitude) / 1e7f);
+  UART_USB.print((gpsData->longitude) / 1e7f);
   UART_USB.print(F("\t"));
   UART_USB.print(F("Altitude: "));
-  UART_USB.println(*(int32_t *)(gpsData->altitude) / 1e7f);
+  UART_USB.println((gpsData->altitude) / 1e7f);
+}
+
+void printSYSData(const SYS_DATA *sysData) {
+  UART_USB.print(F("Battery Voltage: "));
+  UART_USB.print(sysData->batteryVoltage);
+  UART_USB.print(F(" V\t"));
+  UART_USB.print(F("RF Power: "));
+  UART_USB.println(sysData->rfPower);
 }

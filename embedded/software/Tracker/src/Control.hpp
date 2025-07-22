@@ -6,6 +6,7 @@
 #include <task.h>
 
 #include "BattMonitor.hpp"
+#include "ExpFilter.hpp"
 #include "GPS_Talker.hpp"
 #include "RF_Talker.hpp"
 #include "SemaphoreGuard.hpp"
@@ -46,17 +47,17 @@ class Control {
   RF_Talker rfTalker;
   BattMonitor batteryMonitor;
 
-  SemaphoreHandle_t thisGPSDataMutex;
-  SemaphoreHandle_t thatGPSDataMutex;
+  struct theData {
+    SemaphoreHandle_t GPSDataMutex;
+    SemaphoreHandle_t SYSDataMutex;
+    GPS_DATA GPSData;
+    SYS_DATA SYSData;
+  };
 
-  SemaphoreHandle_t thisSYSDataMutex;
-  SemaphoreHandle_t thatSYSDataMutex;
+  theData thisData;
+  theData thatData;
 
-  SYS_DATA thisSYSData;
-  SYS_DATA thatSYSData;
-
-  GPS_DATA thisGPSData;
-  GPS_DATA thatGPSData;
+  ExpFilter GPSFilter;
 
   uint32_t lastGPSUpdateTick;
 

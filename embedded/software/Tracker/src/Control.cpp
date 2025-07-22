@@ -1,11 +1,11 @@
 #include "Control.hpp"
 
-#define MAX_SETUP_RETRIES 5
-#define MAX_LOCKOUT_RST pdMS_TO_TICKS(600'000)  // 10 minutes
+#define MAX_SETUP_RETRIES 3
+#define MAX_LOCKOUT_RST pdMS_TO_TICKS(300'000)  // 5 minutes
 
-Control::Control() : gpsTalker(UART_GPS, GPS_NRST, GPS_TIMEPULSE, LED1_PIN), rfTalker(UART_RF, RF_CTRL0, RF_CTRL1, RF_STATUS, LED2_PIN), batteryMonitor(VBAT_SENSE, BATT_SCALE_FACTOR), initialised(false) {
+Control::Control() : gpsTalker(UART_GPS, GPS_NRST, GPS_TIMEPULSE, LED1_PIN), rfTalker(UART_RF, RF_CTRL0, RF_CTRL1, RF_STATUS, LED2_PIN), batteryMonitor(VBAT_SENSE, BATT_SCALE_FACTOR), GPSFilter(GPS_FILTER_ALPHA, 3), initialised(false) {
   RFBroadcast_MS = 1000 / RF_BROADCAST_FREQ;
-  GPSAquisition_MS = 1000 / GPS_NAV_FREQ;
+  GPSAquisition_MS = 1000 / GPS_UPDATE_FREQ;
   lastGPSUpdateTick = xTaskGetTickCount();
   rfBlast = false;
 }
@@ -50,7 +50,7 @@ bool Control::setupGPS() {
   uint8_t setupRetries = 0;
   bool success = false;
   while (!success && setupRetries < MAX_SETUP_RETRIES) {
-    if (!gpsTalker.begin(GPS_BAUD_RATE, GPS_NAV_FREQ)) {
+    if (!gpsTalker.begin(GPS_BAUD_RATE, GPS_UPDATE_FREQ)) {
       UART_USB.println(F("GPS initialisation failed! Trying again..."));
       gpsTalker.hardwareReset();  // Reset the GPS module
       vTaskDelay(pdMS_TO_TICKS(500));
@@ -72,14 +72,20 @@ void Control::beginTasks() {
 }
 
 void Control::GPS_aquisition_task() {
-  // TODO: We want to average the GPS data since we broadcast at a lower rate
   while (true) {
     if (gpsTalker.checkNewData()) {
-      SemaphoreGuard gpsGuard(thisGPSDataMutex);
+      SemaphoreGuard gpsGuard(thisData.GPSDataMutex);
       if (gpsGuard.acquired()) {
-        thisGPSData = gpsTalker.getData();
-        UART_USB.print(F("This GPS Data: "));
-        printGPSData(&thisGPSData);
+        thisData.GPSData = gpsTalker.getData();  // get new data
+
+        GPSFilter.processSample({thisData.GPSData.altitude, thisData.GPSData.latitude, thisData.GPSData.longitude});  // process new data
+        auto filtered = GPSFilter.getFilteredData();
+
+        // asign filtered data
+        thisData.GPSData.altitude = filtered[0];
+        thisData.GPSData.latitude = filtered[1];
+        thisData.GPSData.longitude = filtered[2];
+
         lastGPSUpdateTick = xTaskGetTickCount();
       }
     }
@@ -92,14 +98,16 @@ void Control::RF_broadcast_task() {
     updateSYSData();
 
     MSG_PACKET msgPacket;
-    SemaphoreGuard gpsGuard(thisGPSDataMutex);
-    SemaphoreGuard sysGuard(thisSYSDataMutex);
+    SemaphoreGuard gpsGuard(thisData.GPSDataMutex);
+    SemaphoreGuard sysGuard(thisData.SYSDataMutex);
     if (gpsGuard.acquired() && sysGuard.acquired()) {
-      packData(&msgPacket, &thisGPSData, &thisSYSData);
+      packData(&msgPacket, &thisData.GPSData, &thisData.SYSData);
     }
     // Send the packed data via RF
     if (rfTalker.sendMessage(&msgPacket)) {
       UART_USB.println(F("RF message sent successfully!"));
+      printGPSData(&thisData.GPSData);
+      printSYSData(&thisData.SYSData);
     } else {
       UART_USB.println(F("Failed to send RF message."));
     }
@@ -115,14 +123,15 @@ void Control::RF_aquisition_task() {
         MSG_PACKET unpackedData;
         unpackResponseData(&unpackedData, response);
 
-        SemaphoreGuard gpsGuard(thatGPSDataMutex);
-        SemaphoreGuard sysGuard(thatSYSDataMutex);
+        SemaphoreGuard gpsGuard(thatData.GPSDataMutex);
+        SemaphoreGuard sysGuard(thatData.SYSDataMutex);
         if (gpsGuard.acquired() && sysGuard.acquired()) {
-          unpackGPSData(&thatGPSData, &unpackedData);
-          unpackSYSData(&thatSYSData, &unpackedData);
+          unpackGPSData(&thatData.GPSData, &unpackedData);
+          unpackSYSData(&thatData.SYSData, &unpackedData);
 
           UART_USB.print(F("Received RF Data: "));
-          printGPSData(&thatGPSData);
+          printGPSData(&thatData.GPSData);
+          printSYSData(&thatData.SYSData);
         }
       }
     }
@@ -131,10 +140,10 @@ void Control::RF_aquisition_task() {
 }
 
 void Control::updateSYSData() {
-  SemaphoreGuard sysGuard(thisSYSDataMutex);
+  SemaphoreGuard sysGuard(thisData.SYSDataMutex);
   if (sysGuard.acquired()) {
-    thisSYSData.batteryVoltage = batteryMonitor.getScaledVoltage();
-    thisSYSData.rfPower = rfTalker.getRFPower();
+    thisData.SYSData.batteryVoltage = batteryMonitor.getScaledVoltage();
+    thisData.SYSData.rfPower = rfTalker.getRFPower();
   }
 }
 
@@ -160,9 +169,10 @@ void Control::Rocket_state_task() {
   // back after rocket returns to ground and reads below the threshold. We want to start blasting RF
   // when threshold is reached and continue blasting until the rocket is recovered.
   while (true) {
-    SemaphoreGuard gpsGuard(thisGPSDataMutex);
+    SemaphoreGuard gpsGuard(thisData.GPSDataMutex);
     if (gpsGuard.acquired()) {
-      if (thisGPSData.altitude > ALTITUDE_THRESHOLD) {
+      // TODO: This doesn't account for the starting altitude
+      if (thisData.GPSData.altitude > ALTITUDE_THRESHOLD) {
         rfBlast = true;
         rfTalker.setRFPower(22);  // Set RF power to high for blasting
       }
