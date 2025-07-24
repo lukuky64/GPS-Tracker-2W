@@ -36,6 +36,8 @@ class Control {
 
   void updateSYSData();
 
+  void updateStartingAltitude(float altitude);
+
   TaskHandle_t GPSTaskHandle;
   TaskHandle_t RFTaskHandle;
   TaskHandle_t RFBroadcastTaskHandle;
@@ -60,6 +62,9 @@ class Control {
   ExpFilter GPSFilter;
 
   uint32_t lastGPSUpdateTick;
+
+  float m_startingAltitude;   // Starting altitude for the rocket state task, in meters
+  uint32_t GPS_update_count;  // Count of GPS updates to determine when to set the starting altitude
 
   bool initialised;
 

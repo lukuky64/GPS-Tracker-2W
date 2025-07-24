@@ -8,6 +8,7 @@ Control::Control() : gpsTalker(UART_GPS, GPS_NRST, GPS_TIMEPULSE, LED1_PIN), rfT
   GPSAquisition_MS = 1000 / GPS_UPDATE_FREQ;
   lastGPSUpdateTick = xTaskGetTickCount();
   rfBlast = false;
+  m_startingAltitude = std::numeric_limits<float>::max();  // init to largest value before value is updated so we don't trigger blast threshold
 }
 
 bool Control::setup() {
@@ -77,6 +78,7 @@ void Control::GPS_aquisition_task() {
       SemaphoreGuard gpsGuard(thisData.GPSDataMutex);
       if (gpsGuard.acquired()) {
         thisData.GPSData = gpsTalker.getData();  // get new data
+        lastGPSUpdateTick = xTaskGetTickCount();
 
         GPSFilter.processSample({thisData.GPSData.altitude, thisData.GPSData.latitude, thisData.GPSData.longitude});  // process new data
         auto filtered = GPSFilter.getFilteredData();
@@ -86,10 +88,17 @@ void Control::GPS_aquisition_task() {
         thisData.GPSData.latitude = filtered[1];
         thisData.GPSData.longitude = filtered[2];
 
-        lastGPSUpdateTick = xTaskGetTickCount();
+        updateStartingAltitude(thisData.GPSData.altitude);  // Update the starting altitude based on the first few GPS updates
+        GPS_update_count++;
       }
+      vTaskDelay(pdMS_TO_TICKS(GPSAquisition_MS));
     }
-    vTaskDelay(pdMS_TO_TICKS(GPSAquisition_MS));
+  }
+}
+
+void Control::updateStartingAltitude(float altitude) {
+  if (GPS_update_count == GPS_UPDATE_FREQ * 10.0f) {  // Use the first 10 seconds of updates to set the starting altitude
+    m_startingAltitude = altitude;                    // Set the starting altitude for the rocket state task
   }
 }
 
@@ -171,8 +180,9 @@ void Control::Rocket_state_task() {
   while (true) {
     SemaphoreGuard gpsGuard(thisData.GPSDataMutex);
     if (gpsGuard.acquired()) {
+      // TODO: If system resets for any reason, this will reset the blasting state
       // TODO: This doesn't account for the starting altitude
-      if (thisData.GPSData.altitude > ALTITUDE_THRESHOLD) {
+      if (thisData.GPSData.altitude - m_startingAltitude > ALTITUDE_THRESHOLD) {
         rfBlast = true;
         rfTalker.setRFPower(22);  // Set RF power to high for blasting
       }

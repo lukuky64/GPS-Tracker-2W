@@ -35,10 +35,10 @@
 #define GPS_UPDATE_FREQ 20     // GPS update frequency
 #define GPS_FILTER_ALPHA 0.1f  // Alpha value for exponential filter on GPS data
 
-#define RF_BAUD_RATE 9600      // Default baud rate for RF module
-#define RF_BROADCAST_FREQ 0.2  // Broadcast frequency
+#define RF_BAUD_RATE 9600       // Default baud rate for RF module
+#define RF_BROADCAST_FREQ 0.2f  // Broadcast frequency
 
-#define ALTITUDE_THRESHOLD 200  // Altitude threshold in meters for rocket state detection
+#define ALTITUDE_THRESHOLD 200.0f  // Altitude threshold in meters for rocket state detection
 
 // TODO: Calibrate this
 #define BATT_SCALE_FACTOR 2.8f  // Voltage divider scaling.
