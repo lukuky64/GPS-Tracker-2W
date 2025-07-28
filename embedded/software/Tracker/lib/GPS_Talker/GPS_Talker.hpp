@@ -9,7 +9,7 @@ class GPS_Talker {
  public:
   GPS_Talker(HardwareSerial& serial, uint8_t nrstPin, uint8_t timePulsePin = 255, uint8_t ledPin = 255);
 
-  bool begin(unsigned long baudRate = 38400, uint8_t navFreq = 2);
+  bool begin(unsigned long baudRate = 9600, uint8_t navFreq = 2);
 
   int32_t getLatitude();
 
@@ -19,7 +19,7 @@ class GPS_Talker {
 
   void hardwareReset();
 
-  static void PVTCallback(UBX_NAV_PVT_data_t* ubxDataStruct);
+  // static void PVTCallback(UBX_NAV_PVT_data_t* ubxDataStruct);
 
   static void timePulseISR();  // Interrupt Service Routine for time pulse
 
@@ -31,6 +31,8 @@ class GPS_Talker {
 
   void setupLED(uint8_t ledPin);
   void toggleLED(uint8_t ledPin);
+
+  void printModuleInfo();
 
  private:
   SFE_UBLOX_GNSS_SERIAL m_GPS_Module;  // SFE_UBLOX_GNSS_SERIAL uses Serial (UART). For I2C or SPI, see Example1 and Example3

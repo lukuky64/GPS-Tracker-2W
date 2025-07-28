@@ -26,13 +26,14 @@ void unpackSYSData(SYS_DATA *sysData, const MSG_PACKET *msgPacket) {
 
 void printGPSData(const GPS_DATA *gpsData) {
   UART_USB.print(F("Latitude: "));
-  UART_USB.print((gpsData->latitude) / 1e7f);
-  UART_USB.print(F("\t"));
+  UART_USB.print((gpsData->latitude), 6);
+  UART_USB.print(F("° \t"));
   UART_USB.print(F("Longitude: "));
-  UART_USB.print((gpsData->longitude) / 1e7f);
-  UART_USB.print(F("\t"));
+  UART_USB.print((gpsData->longitude), 6);
+  UART_USB.print(F("° \t"));
   UART_USB.print(F("Altitude: "));
-  UART_USB.println((gpsData->altitude) / 1e7f);
+  UART_USB.print((gpsData->altitude), 1);
+  UART_USB.println(F("m"));
 }
 
 void printSYSData(const SYS_DATA *sysData) {

@@ -9,6 +9,12 @@ Control::Control() : gpsTalker(UART_GPS, GPS_NRST, GPS_TIMEPULSE, LED1_PIN), rfT
   lastGPSUpdateTick = xTaskGetTickCount();
   rfBlast = false;
   m_startingAltitude = std::numeric_limits<float>::max();  // init to largest value before value is updated so we don't trigger blast threshold
+
+  // Initialize mutexes for thisData and thatData
+  thisData.GPSDataMutex = xSemaphoreCreateMutex();
+  thisData.SYSDataMutex = xSemaphoreCreateMutex();
+  thatData.GPSDataMutex = xSemaphoreCreateMutex();
+  thatData.SYSDataMutex = xSemaphoreCreateMutex();
 }
 
 bool Control::setup() {
@@ -65,11 +71,12 @@ bool Control::setupGPS() {
 }
 
 void Control::beginTasks() {
+  UART_USB.println(F("Starting tasks..."));
   xTaskCreate([](void *param) { static_cast<Control *>(param)->GPS_aquisition_task(); }, "GPS_Aquisition", 8192, this, 2, &GPSTaskHandle);
-  xTaskCreate([](void *param) { static_cast<Control *>(param)->RF_aquisition_task(); }, "RF_Aquisition", 8192, this, 2, &RFTaskHandle);
-  xTaskCreate([](void *param) { static_cast<Control *>(param)->RF_broadcast_task(); }, "RF_Broadcast", 8192, this, 2, &RFBroadcastTaskHandle);
-  xTaskCreate([](void *param) { static_cast<Control *>(param)->GPS_lockout_watchdog_task(); }, "GPS_Watchdog", 2048, this, 1, nullptr);
-  xTaskCreate([](void *param) { static_cast<Control *>(param)->Rocket_state_task(); }, "Rocket_State", 2048, this, 1, nullptr);
+  // xTaskCreate([](void *param) { static_cast<Control *>(param)->RF_aquisition_task(); }, "RF_Aquisition", 8192, this, 2, &RFTaskHandle);
+  // xTaskCreate([](void *param) { static_cast<Control *>(param)->RF_broadcast_task(); }, "RF_Broadcast", 8192, this, 2, &RFBroadcastTaskHandle);
+  // xTaskCreate([](void *param) { static_cast<Control *>(param)->GPS_lockout_watchdog_task(); }, "GPS_Watchdog", 2048, this, 1, nullptr);
+  // xTaskCreate([](void *param) { static_cast<Control *>(param)->Rocket_state_task(); }, "Rocket_State", 2048, this, 1, nullptr);
 }
 
 void Control::GPS_aquisition_task() {
@@ -78,6 +85,7 @@ void Control::GPS_aquisition_task() {
       SemaphoreGuard gpsGuard(thisData.GPSDataMutex);
       if (gpsGuard.acquired()) {
         thisData.GPSData = gpsTalker.getData();  // get new data
+
         lastGPSUpdateTick = xTaskGetTickCount();
 
         GPSFilter.processSample({thisData.GPSData.altitude, thisData.GPSData.latitude, thisData.GPSData.longitude});  // process new data
@@ -88,39 +96,49 @@ void Control::GPS_aquisition_task() {
         thisData.GPSData.latitude = filtered[1];
         thisData.GPSData.longitude = filtered[2];
 
-        updateStartingAltitude(thisData.GPSData.altitude);  // Update the starting altitude based on the first few GPS updates
+        printGPSData(&thisData.GPSData);
+
         GPS_update_count++;
+        // updateStartingAltitude(thisData.GPSData.altitude);  // Update the starting altitude based on the first few GPS updates
       }
-      vTaskDelay(pdMS_TO_TICKS(GPSAquisition_MS));
     }
+    vTaskDelay(pdMS_TO_TICKS(GPSAquisition_MS));
+    // UART_USB.println(F("GPS acquisition task loop..."));
   }
 }
 
 void Control::updateStartingAltitude(float altitude) {
-  if (GPS_update_count == GPS_UPDATE_FREQ * 10.0f) {  // Use the first 10 seconds of updates to set the starting altitude
-    m_startingAltitude = altitude;                    // Set the starting altitude for the rocket state task
+  if (GPS_update_count == GPS_UPDATE_FREQ * 10) {  // Use the first 10 seconds of updates to set the starting altitude
+    m_startingAltitude = altitude;                 // Set the starting altitude for the rocket state task
+    UART_USB.print(F("Starting altitude set to: "));
+    UART_USB.println(m_startingAltitude);
   }
 }
 
 void Control::RF_broadcast_task() {
   while (true) {
     updateSYSData();
-
     MSG_PACKET msgPacket;
     SemaphoreGuard gpsGuard(thisData.GPSDataMutex);
     SemaphoreGuard sysGuard(thisData.SYSDataMutex);
+
+    bool acquired = false;
     if (gpsGuard.acquired() && sysGuard.acquired()) {
       packData(&msgPacket, &thisData.GPSData, &thisData.SYSData);
+      acquired = true;
     }
-    // Send the packed data via RF
-    if (rfTalker.sendMessage(&msgPacket)) {
-      UART_USB.println(F("RF message sent successfully!"));
-      printGPSData(&thisData.GPSData);
-      printSYSData(&thisData.SYSData);
-    } else {
-      UART_USB.println(F("Failed to send RF message."));
+
+    if (acquired) {  // Send the packed data via RF
+      if (rfTalker.sendMessage(&msgPacket)) {
+        UART_USB.println(F("RF message sent successfully!"));
+        printGPSData(&thisData.GPSData);
+        printSYSData(&thisData.SYSData);
+      } else {
+        UART_USB.println(F("Failed to send RF message."));
+      }
     }
     vTaskDelay(pdMS_TO_TICKS(RFBroadcast_MS));
+    UART_USB.println(F("RF broadcast task loop..."));
   }
 }
 

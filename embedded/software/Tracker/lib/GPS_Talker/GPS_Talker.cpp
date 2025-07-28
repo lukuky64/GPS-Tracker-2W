@@ -24,30 +24,34 @@ bool GPS_Talker::begin(unsigned long baudRate, uint8_t navFreq) {
 
   if (!m_GPS_Module.begin(m_GPS_Serial)) return false;  // Connect to the u-blox module
 
+  // m_GPS_Module.setSerialRate(115200);
+  // m_GPS_Serial.begin(115200);
+
   if (!m_GPS_Module.setNavigationFrequency(m_navFreq)) return false;  // Produce #N solutions per second
 
   if (!m_GPS_Module.setUART1Output(COM_TYPE_UBX)) return false;  // Set the UART1 port to output UBX only (turn off NMEA noise)
 
-  if (!m_GPS_Module.setAutoPVTcallbackPtr(PVTCallback)) return false;  // Set the callback for PVT messages
+  // if (!m_GPS_Module.setAutoPVTcallbackPtr(PVTCallback)) return false;  // Set the callback for PVT messages // NOTE: This doesn't seem to work ATM
 
   m_initialised = true;
   return m_initialised;
 }
 
-void GPS_Talker::PVTCallback(UBX_NAV_PVT_data_t* ubxDataStruct) {
-  if (ubxDataStruct->flags.bits.gnssFixOK == 1) {
-    m_instance->m_gpsData.latitude = ubxDataStruct->lat * 1e-7f;     // Latitude in degrees (float)
-    m_instance->m_gpsData.longitude = ubxDataStruct->lon * 1e-7f;    // Longitude in degrees (float)
-    m_instance->m_gpsData.altitude = ubxDataStruct->hMSL / 1000.0f;  // Altitude above Mean Sea Level in meters (float)
+// void GPS_Talker::PVTCallback(UBX_NAV_PVT_data_t* ubxDataStruct) {
+//   UART_USB.println(F("PVT Callback triggered. Processing data..."));
+//   if (ubxDataStruct->flags.bits.gnssFixOK == 1) {
+//     m_instance->m_gpsData.latitude = ubxDataStruct->lat * 1e-7f;     // Latitude in degrees (float)
+//     m_instance->m_gpsData.longitude = ubxDataStruct->lon * 1e-7f;    // Longitude in degrees (float)
+//     m_instance->m_gpsData.altitude = ubxDataStruct->hMSL / 1000.0f;  // Altitude above Mean Sea Level in meters (float)
 
-    // time in UTC
-    m_instance->m_gpsData.hour = ubxDataStruct->hour;
-    m_instance->m_gpsData.minute = ubxDataStruct->min;
-    m_instance->m_gpsData.second = ubxDataStruct->sec;
+//     // time in UTC
+//     m_instance->m_gpsData.hour = ubxDataStruct->hour;
+//     m_instance->m_gpsData.minute = ubxDataStruct->min;
+//     m_instance->m_gpsData.second = ubxDataStruct->sec;
 
-    m_instance->m_newData = true;
-  }
-}
+//     m_instance->m_newData = true;
+//   }
+// }
 
 void GPS_Talker::timePulseISR() {
   if (m_instance) {
@@ -71,9 +75,20 @@ void GPS_Talker::hardwareReset() {
 
 // this should be called regularly
 bool GPS_Talker::checkNewData() {
-  m_GPS_Module.checkUblox();      // Check for the arrival of new data and process it
-  m_GPS_Module.checkCallbacks();  // Check if any callbacks are waiting to be processed
-  return m_newData;               // Return true if new data is available
+  if (m_GPS_Module.getPVT() == true) {
+    if (m_GPS_Module.getSIV() > 0) {
+      m_gpsData.latitude = m_GPS_Module.getLatitude() * 1e-7f;
+      m_gpsData.longitude = m_GPS_Module.getLongitude() * 1e-7f;
+      m_gpsData.altitude = m_GPS_Module.getAltitudeMSL() / 1000.0f;
+      m_gpsData.hour = m_GPS_Module.getHour();
+      m_gpsData.minute = m_GPS_Module.getMinute();
+      m_gpsData.second = m_GPS_Module.getSecond();
+
+      // printGPSData(&m_gpsData);
+      m_newData = true;
+    }
+  }
+  return m_newData;
 }
 
 GPS_DATA GPS_Talker::getData() {
@@ -92,4 +107,9 @@ void GPS_Talker::toggleLED(uint8_t ledPin) {
   if (ledPin != 255) {
     digitalWrite(ledPin, !digitalRead(ledPin));
   }
+}
+
+void GPS_Talker::printModuleInfo() {
+  UART_USB.print(F("Module Name: "));
+  UART_USB.println(m_GPS_Module.getModuleName());
 }

@@ -5,6 +5,7 @@
 Control control;
 
 void setup() {
+  delay(1000);
   if (!control.setup()) control.restartDevice();
   delay(100);
 }
