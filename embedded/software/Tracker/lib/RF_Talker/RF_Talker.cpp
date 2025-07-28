@@ -37,7 +37,7 @@ bool RF_Talker::sendMessage(const void* message) {
     UART_USB.println(rs.getResponseDescription());
     return false;
   }
-  toggleLED(m_LED_Pin);
+  toggleLED();
   return true;
 }
 
@@ -59,15 +59,22 @@ bool RF_Talker::receiveMessage(ResponseContainer& response) {
 }
 
 void RF_Talker::setupLED(uint8_t ledPin) {
-  if (ledPin != 255) {
-    pinMode(ledPin, OUTPUT);
-    digitalWrite(ledPin, LOW);  // Start with LED off
+  m_LED_Pin = ledPin;
+  if (m_LED_Pin != 255) {
+    pinMode(m_LED_Pin, OUTPUT);
+    digitalWrite(m_LED_Pin, LOW);  // Start with LED off
   }
 }
 
-void RF_Talker::toggleLED(uint8_t ledPin) {
-  if (ledPin != 255) {
-    digitalWrite(ledPin, !digitalRead(ledPin));
+void RF_Talker::toggleLED() {
+  if (m_LED_Pin != 255) {
+    digitalWrite(m_LED_Pin, !digitalRead(m_LED_Pin));
+  }
+}
+
+void RF_Talker::setLED(bool state) {
+  if (m_LED_Pin != 255) {
+    digitalWrite(m_LED_Pin, state);
   }
 }
 

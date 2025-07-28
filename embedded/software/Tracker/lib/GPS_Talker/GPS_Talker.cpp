@@ -55,7 +55,7 @@ bool GPS_Talker::begin(unsigned long baudRate, uint8_t navFreq) {
 
 void GPS_Talker::timePulseISR() {
   if (m_instance) {
-    m_instance->toggleLED(m_instance->m_LED_Pin);  // Toggle the LED if it is configured
+    m_instance->toggleLED();  // Toggle the LED if it is configured
   }
 }
 
@@ -83,6 +83,7 @@ bool GPS_Talker::checkNewData() {
       m_gpsData.hour = m_GPS_Module.getHour();
       m_gpsData.minute = m_GPS_Module.getMinute();
       m_gpsData.second = m_GPS_Module.getSecond();
+      m_gpsData.nFixes = m_GPS_Module.getSIV();
 
       // printGPSData(&m_gpsData);
       m_newData = true;
@@ -97,15 +98,22 @@ GPS_DATA GPS_Talker::getData() {
 }
 
 void GPS_Talker::setupLED(uint8_t ledPin) {
-  if (ledPin != 255) {
-    pinMode(ledPin, OUTPUT);
-    digitalWrite(ledPin, LOW);  // Start with LED off
+  m_LED_Pin = ledPin;
+  if (m_LED_Pin != 255) {
+    pinMode(m_LED_Pin, OUTPUT);
+    digitalWrite(m_LED_Pin, LOW);  // Start with LED off
   }
 }
 
-void GPS_Talker::toggleLED(uint8_t ledPin) {
-  if (ledPin != 255) {
-    digitalWrite(ledPin, !digitalRead(ledPin));
+void GPS_Talker::toggleLED() {
+  if (m_LED_Pin != 255) {
+    digitalWrite(m_LED_Pin, !digitalRead(m_LED_Pin));
+  }
+}
+
+void GPS_Talker::setLED(bool state) {
+  if (m_LED_Pin != 255) {
+    digitalWrite(m_LED_Pin, state);
   }
 }
 

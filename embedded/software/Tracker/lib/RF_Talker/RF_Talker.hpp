@@ -25,7 +25,8 @@ class RF_Talker {
   int mapRFPower(int8_t& power);
 
   void setupLED(uint8_t ledPin);
-  void toggleLED(uint8_t ledPin);
+  void toggleLED();
+  void setLED(bool state);
 
  private:
   LoRa_E22* m_e22Module;

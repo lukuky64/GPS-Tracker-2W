@@ -30,7 +30,8 @@ class GPS_Talker {
   GPS_DATA getData();
 
   void setupLED(uint8_t ledPin);
-  void toggleLED(uint8_t ledPin);
+  void toggleLED();
+  void setLED(bool state);
 
   void printModuleInfo();
 

@@ -2,6 +2,9 @@
 
 #include <Arduino.h>
 
+// -------------------- DEBUG SETTINGS --------------------
+#define DEBUG_VERBOSE 1  // Set to 0 to reduce debug output and improve performance
+
 // -------------------- PORT MAPPING --------------------
 
 #define UART_GPS Serial2  // Changed to Serial2 for UART1 (pins 20/21)
@@ -32,7 +35,7 @@
 
 // -------------------- CONST DEFINITIONS --------------------
 #define GPS_BAUD_RATE 115200   // Default baud rate for u-blox M10 module = 9600, but i've changed this to 115200 for faster communication
-#define GPS_UPDATE_FREQ 20     // GPS update frequency
+#define GPS_UPDATE_FREQ 10     // GPS update frequency - reduced from 20 to match hardware capability
 #define GPS_FILTER_ALPHA 0.1f  // Alpha value for exponential filter on GPS data
 
 #define RF_BAUD_RATE 9600       // Default baud rate for RF module

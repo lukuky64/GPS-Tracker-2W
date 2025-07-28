@@ -3,7 +3,7 @@
 #define MAX_SETUP_RETRIES 3
 #define MAX_LOCKOUT_RST pdMS_TO_TICKS(300'000)  // 5 minutes
 
-Control::Control() : gpsTalker(UART_GPS, GPS_NRST, GPS_TIMEPULSE, LED1_PIN), rfTalker(UART_RF, RF_CTRL0, RF_CTRL1, RF_STATUS, LED2_PIN), batteryMonitor(VBAT_SENSE, BATT_SCALE_FACTOR), GPSFilter(GPS_FILTER_ALPHA, 3), initialised(false) {
+Control::Control() : gpsTalker(UART_GPS, GPS_NRST, GPS_TIMEPULSE, LED2_PIN), rfTalker(UART_RF, RF_CTRL0, RF_CTRL1, RF_STATUS, LED1_PIN), batteryMonitor(VBAT_SENSE, BATT_SCALE_FACTOR), GPSFilter(GPS_FILTER_ALPHA, 3), initialised(false) {
   RFBroadcast_MS = 1000 / RF_BROADCAST_FREQ;
   GPSAquisition_MS = 1000 / GPS_UPDATE_FREQ;
   lastGPSUpdateTick = xTaskGetTickCount();
@@ -12,6 +12,7 @@ Control::Control() : gpsTalker(UART_GPS, GPS_NRST, GPS_TIMEPULSE, LED1_PIN), rfT
 
   // Initialize mutexes for thisData and thatData
   thisData.GPSDataMutex = xSemaphoreCreateMutex();
+
   thisData.SYSDataMutex = xSemaphoreCreateMutex();
   thatData.GPSDataMutex = xSemaphoreCreateMutex();
   thatData.SYSDataMutex = xSemaphoreCreateMutex();
@@ -71,56 +72,121 @@ bool Control::setupGPS() {
 }
 
 void Control::beginTasks() {
-  UART_USB.println(F("Starting tasks..."));
-  xTaskCreate([](void *param) { static_cast<Control *>(param)->GPS_aquisition_task(); }, "GPS_Aquisition", 8192, this, 2, &GPSTaskHandle);
-  // xTaskCreate([](void *param) { static_cast<Control *>(param)->RF_aquisition_task(); }, "RF_Aquisition", 8192, this, 2, &RFTaskHandle);
-  // xTaskCreate([](void *param) { static_cast<Control *>(param)->RF_broadcast_task(); }, "RF_Broadcast", 8192, this, 2, &RFBroadcastTaskHandle);
-  // xTaskCreate([](void *param) { static_cast<Control *>(param)->GPS_lockout_watchdog_task(); }, "GPS_Watchdog", 2048, this, 1, nullptr);
-  // xTaskCreate([](void *param) { static_cast<Control *>(param)->Rocket_state_task(); }, "Rocket_State", 2048, this, 1, nullptr);
+  UART_USB.println(F("Starting GPS task only for testing..."));
+
+  // GPS task gets highest priority (3) and runs on core 1 for dedicated processing
+  xTaskCreateAffinitySet([](void *param) { static_cast<Control *>(param)->GPS_aquisition_task(); }, "GPS_Aquisition", 4096, this, 3, (1 << 1), &m_taskHandles.GPSTaskHandle);
+
+  // Temporarily disable all other tasks to test GPS performance
+  // RF tasks run on core 0 with medium priority (2)
+  // xTaskCreateAffinitySet([](void *param) { static_cast<Control *>(param)->RF_aquisition_task(); }, "RF_Aquisition", 4096, this, 2, (1 << 0), &m_taskHandles.RFTaskHandle);
+  // xTaskCreateAffinitySet([](void *param) { static_cast<Control *>(param)->RF_broadcast_task(); }, "RF_Broadcast", 4096, this, 2, (1 << 0), &m_taskHandles.RFBroadcastTaskHandle);
+
+  // // Low priority tasks run on core 0
+
+  // FIX: GPS task is slow as shit when other tasks are running
+  xTaskCreateAffinitySet([](void *param) { static_cast<Control *>(param)->heartbeat_task(); }, "Heartbeat", 2048, this, 1, (1 << 0), &m_taskHandles.HeartBeatTaskHandle);
+  xTaskCreateAffinitySet([](void *param) { static_cast<Control *>(param)->GPS_lockout_watchdog_task(); }, "GPS_Watchdog", 2048, this, 1, (1 << 0), &m_taskHandles.GPSLockoutWatchdogTaskHandle);
+  xTaskCreateAffinitySet([](void *param) { static_cast<Control *>(param)->Rocket_state_task(); }, "Rocket_State", 2048, this, 1, (1 << 0), &m_taskHandles.RocketStateTaskHandle);
+}
+
+void Control::heartbeat_task() {
+  TickType_t xLastWakeTime = xTaskGetTickCount();
+  uint32_t heartbeatCount = 0;
+
+  while (true) {
+    gpsTalker.setLED(false);
+    rfTalker.setLED(false);
+    vTaskDelay(pdMS_TO_TICKS(20));
+    gpsTalker.setLED(true);
+    rfTalker.setLED(true);
+    vTaskDelay(pdMS_TO_TICKS(20));
+    gpsTalker.setLED(false);
+    rfTalker.setLED(false);
+
+    heartbeatCount++;
+    // Only print heartbeat status every 30 beats (60 seconds)
+    if (heartbeatCount % 30 == 0) {
+      UART_USB.println(F("Heartbeat OK"));
+    }
+
+    // Use longer delay to reduce CPU usage - heartbeat every 2 seconds instead of 5
+    vTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(2000));
+    // checkTaskStack();
+  }
 }
 
 void Control::GPS_aquisition_task() {
+  TickType_t xLastWakeTime = xTaskGetTickCount();
+  uint32_t updateCount = 0;
+  uint32_t lastPrintTime = 0;
+
   while (true) {
     if (gpsTalker.checkNewData()) {
-      SemaphoreGuard gpsGuard(thisData.GPSDataMutex);
-      if (gpsGuard.acquired()) {
-        thisData.GPSData = gpsTalker.getData();  // get new data
+      GPS_DATA localGPSData;  // Local copy for printing
+      bool dataProcessed = false;
 
-        lastGPSUpdateTick = xTaskGetTickCount();
+      {
+        SemaphoreGuard gpsGuard(thisData.GPSDataMutex);
+        if (gpsGuard.acquired()) {
+          thisData.GPSData = gpsTalker.getData();  // get new data
+          lastGPSUpdateTick = xTaskGetTickCount();
 
-        GPSFilter.processSample({thisData.GPSData.altitude, thisData.GPSData.latitude, thisData.GPSData.longitude});  // process new data
-        auto filtered = GPSFilter.getFilteredData();
+          // Re-enable GPS filtering now that we understand the timing
+          GPSFilter.processSample({thisData.GPSData.altitude, thisData.GPSData.latitude, thisData.GPSData.longitude});
+          auto filtered = GPSFilter.getFilteredData();
 
-        // asign filtered data
-        thisData.GPSData.altitude = filtered[0];
-        thisData.GPSData.latitude = filtered[1];
-        thisData.GPSData.longitude = filtered[2];
+          // Assign filtered data
+          thisData.GPSData.altitude = filtered[0];
+          thisData.GPSData.latitude = filtered[1];
+          thisData.GPSData.longitude = filtered[2];
 
-        printGPSData(&thisData.GPSData);
+          localGPSData = thisData.GPSData;  // Copy for printing outside mutex
+          dataProcessed = true;
+          updateCount++;
 
-        GPS_update_count++;
-        // updateStartingAltitude(thisData.GPSData.altitude);  // Update the starting altitude based on the first few GPS updates
+          if (thisData.GPSData.nFixes >= 3) {
+            GPS_update_count++;
+            updateStartingAltitude(thisData.GPSData.altitude);
+          }
+        }
+      }
+
+      // Print GPS data every 2 seconds to monitor performance
+      uint32_t currentTime = xTaskGetTickCount();
+      if (dataProcessed && (currentTime - lastPrintTime) > pdMS_TO_TICKS(2000)) {
+        lastPrintTime = currentTime;
+        char buffer[128];
+        snprintf(buffer, sizeof(buffer), "GPS Update #%lu: Lat=%.6f, Lon=%.6f, Alt=%.1fm, Fixes=%d", updateCount, localGPSData.latitude, localGPSData.longitude, localGPSData.altitude, localGPSData.nFixes);
+        UART_USB.println(buffer);
       }
     }
-    vTaskDelay(pdMS_TO_TICKS(GPSAquisition_MS));
-    // UART_USB.println(F("GPS acquisition task loop..."));
+
+    // Use proper GPS timing - checkNewData() blocks until new data is available
+    // So we can use the original timing since the blocking handles the real rate
+    vTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(GPSAquisition_MS));
   }
 }
 
 void Control::updateStartingAltitude(float altitude) {
-  if (GPS_update_count == GPS_UPDATE_FREQ * 10) {  // Use the first 10 seconds of updates to set the starting altitude
-    m_startingAltitude = altitude;                 // Set the starting altitude for the rocket state task
+  if (GPS_update_count == GPS_UPDATE_FREQ * 10) {
+    m_startingAltitude = altitude;  // Set the starting altitude for the rocket state task
     UART_USB.print(F("Starting altitude set to: "));
     UART_USB.println(m_startingAltitude);
   }
 }
 
 void Control::RF_broadcast_task() {
+  TickType_t xLastWakeTime = xTaskGetTickCount();
+
   while (true) {
+    // HACK: testing print data here while we don't have RF
     updateSYSData();
     MSG_PACKET msgPacket;
-    SemaphoreGuard gpsGuard(thisData.GPSDataMutex);
-    SemaphoreGuard sysGuard(thisData.SYSDataMutex);
+
+    // Try to acquire mutexes with timeout to avoid blocking indefinitely
+    SemaphoreGuard gpsGuard(thisData.GPSDataMutex, pdMS_TO_TICKS(10));
+    SemaphoreGuard sysGuard(thisData.SYSDataMutex, pdMS_TO_TICKS(10));
 
     bool acquired = false;
     if (gpsGuard.acquired() && sysGuard.acquired()) {
@@ -130,15 +196,22 @@ void Control::RF_broadcast_task() {
 
     if (acquired) {  // Send the packed data via RF
       if (rfTalker.sendMessage(&msgPacket)) {
+#if DEBUG_VERBOSE
         UART_USB.println(F("RF message sent successfully!"));
-        printGPSData(&thisData.GPSData);
+        // GPS data is already printed by GPS_aquisition_task, only print SYS data here
         printSYSData(&thisData.SYSData);
+#endif
       } else {
         UART_USB.println(F("Failed to send RF message."));
       }
+    } else {
+#if DEBUG_VERBOSE
+      UART_USB.println(F("RF broadcast: failed to acquire mutexes"));
+#endif
     }
-    vTaskDelay(pdMS_TO_TICKS(RFBroadcast_MS));
-    UART_USB.println(F("RF broadcast task loop..."));
+
+    // Use vTaskDelayUntil for precise timing
+    vTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(RFBroadcast_MS));
   }
 }
 
@@ -178,10 +251,10 @@ void Control::GPS_lockout_watchdog_task() {
   while (true) {
     uint32_t now = xTaskGetTickCount();
     if ((now - lastGPSUpdateTick) > MAX_LOCKOUT_RST) {
-      UART_USB.println(F("GPS lockout detected! Restarting GPS module..."));
+      UART_USB.println(F("GPS LOCKOUT - RESETTING"));
       gpsTalker.hardwareReset();  // Reset the GPS module
     }
-    vTaskDelay(pdMS_TO_TICKS(10'000));  // Check every 10 seconds
+    vTaskDelay(pdMS_TO_TICKS(30'000));  // Check every 30 seconds instead of 10 to reduce CPU load
   }
 }
 
@@ -199,12 +272,24 @@ void Control::Rocket_state_task() {
     SemaphoreGuard gpsGuard(thisData.GPSDataMutex);
     if (gpsGuard.acquired()) {
       // TODO: If system resets for any reason, this will reset the blasting state
-      // TODO: This doesn't account for the starting altitude
+      // TODO: can we get reset reason from device, store rfBlast in flash.
       if (thisData.GPSData.altitude - m_startingAltitude > ALTITUDE_THRESHOLD) {
         rfBlast = true;
         rfTalker.setRFPower(22);  // Set RF power to high for blasting
       }
     }
-    vTaskDelay(pdMS_TO_TICKS(1000));  // Check every 1 second
+    vTaskDelay(pdMS_TO_TICKS(1'000));  // Check every 1 second
+  }
+}
+
+void Control::checkTaskStack() {
+  // print how much stack is left on each task
+  for (const auto &task : m_taskHandleMap) {
+    if (task.handle != nullptr && *task.handle != nullptr) {
+      UBaseType_t stackHighWaterMark = uxTaskGetStackHighWaterMark(*task.handle);
+      UART_USB.printf("Task: %s, Stack High Water Mark: %u\n", task.name.c_str(), stackHighWaterMark);
+    } else {
+      UART_USB.printf("Task: %s, Handle is null or invalid.\n", task.name.c_str());
+    }
   }
 }

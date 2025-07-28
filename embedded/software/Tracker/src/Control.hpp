@@ -28,6 +28,7 @@ class Control {
   void RF_aquisition_task();
   void RF_broadcast_task();
   void Rocket_state_task();
+  void heartbeat_task();
 
   void GPS_lockout_watchdog_task();
 
@@ -38,9 +39,25 @@ class Control {
 
   void updateStartingAltitude(float altitude);
 
-  TaskHandle_t GPSTaskHandle;
-  TaskHandle_t RFTaskHandle;
-  TaskHandle_t RFBroadcastTaskHandle;
+  void checkTaskStack();
+
+  struct handles {
+    TaskHandle_t GPSTaskHandle = nullptr;
+    TaskHandle_t RFTaskHandle = nullptr;
+    TaskHandle_t RFBroadcastTaskHandle = nullptr;
+    TaskHandle_t HeartBeatTaskHandle = nullptr;
+    TaskHandle_t RocketStateTaskHandle = nullptr;
+    TaskHandle_t GPSLockoutWatchdogTaskHandle = nullptr;
+  };
+  handles m_taskHandles;
+
+  struct HandleMap {
+    String name;
+    TaskHandle_t *handle;
+  };
+
+  HandleMap m_taskHandleMap[6] = {{"GPS_Aquisition", &m_taskHandles.GPSTaskHandle},  {"RF_Aquisition", &m_taskHandles.RFTaskHandle},         {"RF_Broadcast", &m_taskHandles.RFBroadcastTaskHandle},
+                                  {"Heartbeat", &m_taskHandles.HeartBeatTaskHandle}, {"Rocket_State", &m_taskHandles.RocketStateTaskHandle}, {"GPS_Lockout_Watchdog", &m_taskHandles.GPSLockoutWatchdogTaskHandle}};
 
   uint32_t RFBroadcast_MS;
   uint32_t GPSAquisition_MS;
