@@ -8,11 +8,12 @@ import random
 import serial
 import re
 import glob
+import time as pytime
 
 app = Flask(__name__)
 gps_data = {"lat": -33.8688, "lon": 151.2093}
 gps_data = {
-    "local": {"lat": -33.8688, "lon": 151.2093},
+    "local": {"lat": -33.8688, "lon": 151.2093, "last_update": pytime.time()},
     "tracker": None
 }
 HTML_TEMPLATE = """
@@ -69,6 +70,12 @@ HTML_TEMPLATE = """
 
             var localMarker = null;
             var trackerMarker = null;
+            var lastLocalUpdate = null;
+            var lastTrackerUpdate = null;
+            var localAge = 0;
+            var trackerAge = 0;
+            var localData = null;
+            var trackerData = null;
 
             function createOrUpdateMarker(marker, lat, lon, color, label) {
                 if (marker) {
@@ -94,21 +101,29 @@ HTML_TEMPLATE = """
                 try {
                     const response = await fetch("/position");
                     const data = await response.json();
+                    const now = Date.now() / 1000;
                     if (data.local) {
+                        localData = data.local;
+                        lastLocalUpdate = data.local.last_update;
+                        localAge = Math.round(now - lastLocalUpdate);
                         localMarker = createOrUpdateMarker(
                             localMarker,
                             data.local.lat,
                             data.local.lon,
                             'blue',
-                            `Local GPS<br>Lat: ${data.local.lat.toFixed(5)}, Lon: ${data.local.lon.toFixed(5)}`
+                            `Local GPS<br>Lat: ${data.local.lat.toFixed(5)}, Lon: ${data.local.lon.toFixed(5)}<br><span id='local-age'>Updated ${localAge} sec ago</span>`
                         );
                         map.setView([data.local.lat, data.local.lon]);
                     }
                     if (data.tracker) {
+                        trackerData = data.tracker;
+                        lastTrackerUpdate = data.tracker.last_update;
+                        trackerAge = Math.round(now - lastTrackerUpdate);
                         let popupText = `Tracker GPS<br>Lat: ${data.tracker.lat.toFixed(5)}, Lon: ${data.tracker.lon.toFixed(5)}`;
                         if (data.tracker.altitude !== undefined && data.tracker.fixes !== undefined) {
                             popupText += `<br>Alt: ${data.tracker.altitude}m<br>Fixes: ${data.tracker.fixes}`;
                         }
+                        popupText += `<br><span id='tracker-age'>Updated ${trackerAge} sec ago</span>`;
                         trackerMarker = createOrUpdateMarker(
                             trackerMarker,
                             data.tracker.lat,
@@ -122,7 +137,22 @@ HTML_TEMPLATE = """
                 }
             }
 
-            setInterval(updatePosition, 1000);  // Update every 1 second
+            function updateAges() {
+                const now = Date.now() / 1000;
+                if (lastLocalUpdate !== null) {
+                    localAge = Math.round(now - lastLocalUpdate);
+                    const el = document.getElementById('local-age');
+                    if (el) el.textContent = `Updated ${localAge} sec ago`;
+                }
+                if (lastTrackerUpdate !== null) {
+                    trackerAge = Math.round(now - lastTrackerUpdate);
+                    const el = document.getElementById('tracker-age');
+                    if (el) el.textContent = `Updated ${trackerAge} sec ago`;
+                }
+            }
+
+            setInterval(updatePosition, 1000);  // Fetch new data every 1 second
+            setInterval(updateAges, 1000);      // Update age display every 1 second
         });
         window.onerror = function(message, source, lineno, colno, error) {
             console.log('JS Error:', message, 'at', source, lineno + ':' + colno);
@@ -171,14 +201,16 @@ def read_serial_gps():
             if local_match:
                 gps_data["local"] = {
                     "lat": float(local_match.group(1)),
-                    "lon": float(local_match.group(2))
+                    "lon": float(local_match.group(2)),
+                    "last_update": pytime.time()
                 }
             elif tracker_match:
                 gps_data["tracker"] = {
                     "lat": float(tracker_match.group(1)),
                     "lon": float(tracker_match.group(2)),
                     "altitude": float(tracker_match.group(3)),
-                    "fixes": int(tracker_match.group(4))
+                    "fixes": int(tracker_match.group(4)),
+                    "last_update": pytime.time()
                 }
         except Exception as e:
             print('Serial read error:', e)
