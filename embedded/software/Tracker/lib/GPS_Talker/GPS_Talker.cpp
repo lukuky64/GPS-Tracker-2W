@@ -93,28 +93,31 @@ void GPS_Talker::hardwareReset() {
 
 // this should be called regularly
 bool GPS_Talker::checkNewData() {
-  // BUG: getPVT is using ~50ms to return, the rest is another ~50ms. Limiting the rate to 10Hz.
+  // BUG: this function is using ~50ms total.
   unsigned long startMicros;  // Start timing
   unsigned long elapsedMicros = 0;
-  startMicros = micros();  // Start timing
-  if (m_GPS_Module.getPVT() == true) {
-    if (m_GPS_Module.getSIV() > 0) {
-      m_gpsData.latitude = m_GPS_Module.getLatitude() * 1e-7f;
-      m_gpsData.longitude = m_GPS_Module.getLongitude() * 1e-7f;
-      m_gpsData.altitude = m_GPS_Module.getAltitudeMSL() / 1000.0f;
-      m_gpsData.nFixes = m_GPS_Module.getSIV();
-      elapsedMicros = micros() - startMicros;  // Calculate elapsed time
 
-      // NOTE: this data isn't even used
-      // m_gpsData.hour = m_GPS_Module.getHour();
-      // m_gpsData.minute = m_GPS_Module.getMinute();
-      // m_gpsData.second = m_GPS_Module.getSecond();
+  startMicros = micros();  // Start timing
+  if (m_GPS_Module.getPVT()) {
+    auto* pvt = m_GPS_Module.packetUBXNAVPVT;  // or similar, check actual member name
+
+    // static uint32_t last_iTOW = 0;
+    // uint32_t iTOW = pvt->data.iTOW;
+    // UART_USB.printf("iTOW: %lu, dt: %lu ms\n", iTOW, iTOW - last_iTOW);
+    // last_iTOW = iTOW;
+
+    uint8_t SIV = pvt->data.numSV;  // Get the number of satellites in view
+    if (SIV > 0) {
+      m_gpsData.latitude = pvt->data.lat * 1e-7f;
+      m_gpsData.longitude = pvt->data.lon * 1e-7f;
+      m_gpsData.altitude = pvt->data.hMSL / 1000.0f;
+      m_gpsData.nFixes = SIV;
 
       // printGPSData(&m_gpsData);
       m_newData = true;
     }
   }
-
+  elapsedMicros = micros() - startMicros;  // Calculate elapsed time
   // UART_USB.printf("%lu us\n", elapsedMicros);
   return m_newData;
 }

@@ -17,9 +17,9 @@ struct GPS_DATA {
   float latitude;   // Latitude in degrees (float)
   float longitude;  // Longitude in degrees (float)
   float altitude;   // Altitude above Mean Sea Level in meters (float)
-  uint8_t hour;
-  uint8_t minute;
-  uint8_t second;
+  // uint8_t hour;
+  // uint8_t minute;
+  // uint8_t second;
   uint8_t nFixes;
 };
 

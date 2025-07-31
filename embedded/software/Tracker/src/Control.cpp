@@ -125,18 +125,19 @@ void Control::heartbeat_task() {
 void Control::GPS_aquisition_task() {
   TickType_t xLastWakeTime = xTaskGetTickCount();
   uint32_t updateCount = 0;
-  uint32_t lastPrintTime = 0;
+  unsigned long lastPrintTime = 0;
+
+  unsigned long startMicros;  // Start timing
+  unsigned long elapsedMicros = 0;
 
   while (true) {
-    // TODO: time the check function
-    // TODO: time the other stuff too
+    startMicros = micros();  // Start timing
     if (gpsTalker.checkNewData()) {
       GPS_DATA localGPSData;  // Local copy for printing
       bool dataProcessed = false;
       {
         // Use timeout to prevent GPS task from blocking indefinitely
-        SemaphoreGuard gpsGuard(thisData.GPSDataMutex, pdMS_TO_TICKS(50));
-
+        SemaphoreGuard gpsGuard(thisData.GPSDataMutex, pdMS_TO_TICKS(20));
         // loop only takes ~60us
         if (gpsGuard.acquired()) {
           thisData.GPSData = gpsTalker.getData();  // get new data
@@ -155,24 +156,32 @@ void Control::GPS_aquisition_task() {
           dataProcessed = true;
           updateCount++;
 
+          // UART_USB.printf("updateCount: %lu\n", updateCount);
+
           // 3 is enough for 3D fix. but 4 shows better results experimentally
           if (thisData.GPSData.nFixes >= 4) {
             GPS_update_count++;
             updateStartingAltitude(thisData.GPSData.altitude);
           }
+        } else {
+          // UART_USB.println("Missed GPS sample: mutex not acquired");
         }
       }
 
       // Print GPS data every X seconds to monitor performance
-      uint32_t currentTime = xTaskGetTickCount();
-      if (dataProcessed && (currentTime - lastPrintTime) > pdMS_TO_TICKS(2'000)) {
+      unsigned long currentTime = millis();
+      if (dataProcessed && (currentTime - lastPrintTime) > 1000) {
         lastPrintTime = currentTime;
         char buffer[128];
         snprintf(buffer, sizeof(buffer), "Local GPS #%lu: Lat=%.5f, Lon=%.5f, Alt=%.1fm, Fixes=%d", updateCount, localGPSData.latitude, localGPSData.longitude, localGPSData.altitude, localGPSData.nFixes);
         UART_USB.println(buffer);
       }
+    } else {
+      // UART_USB.println("No new GPS data available");
     }
 
+    // elapsedMicros = micros() - startMicros;  // Calculate elapsed time
+    // UART_USB.printf("%lu us\n", elapsedMicros);
     // Use proper GPS timing - checkNewData() blocks until new data is available
     // So we can use the original timing since the blocking handles the real rate
     vTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(GPSAquisition_MS));

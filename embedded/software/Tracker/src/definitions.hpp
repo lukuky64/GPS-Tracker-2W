@@ -37,7 +37,7 @@
 
 // 250000
 #define GPS_BAUD_RATE 250000   // Default baud rate for u-blox M10 module = 9600, but i've changed this to 115200 for faster communication
-#define GPS_UPDATE_FREQ 20     // GPS update frequency - reduced from 20 to match hardware capability
+#define GPS_UPDATE_FREQ 20     // GPS update frequency - I was able to get up to 30Hz
 #define GPS_FILTER_ALPHA 0.1f  // Alpha value for exponential filter on GPS data
 
 #define RF_BAUD_RATE 9600       // Default baud rate for RF module
