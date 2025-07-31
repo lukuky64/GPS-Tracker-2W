@@ -20,16 +20,40 @@ bool GPS_Talker::begin(unsigned long baudRate, uint8_t navFreq) {
     attachInterrupt(digitalPinToInterrupt(m_timePulse_Pin), timePulseISR, RISING);
   }
 
+  // try last baud rate first
   m_GPS_Serial.begin(m_baudRate);
+  if (!m_GPS_Module.begin(m_GPS_Serial)) {
+    // try default baud rate first
+    m_GPS_Serial.begin(9600);
+    if (!m_GPS_Module.begin(m_GPS_Serial)) {
+      // try different rate if fails
+      m_GPS_Serial.begin(115200);
+      if (!m_GPS_Module.begin(m_GPS_Serial)) {
+        UART_USB.println(F("Failed to connect to GPS module with default baud rates!"));
+        return false;
+      }
+    }
+    vTaskDelay(pdMS_TO_TICKS(100));  // Give the module time to change baud rate
+    // set to desired baud rate
+    m_GPS_Module.setSerialRate(m_baudRate);  // Set the serial port to the new baud rate
 
-  if (!m_GPS_Module.begin(m_GPS_Serial)) return false;  // Connect to the u-blox module
+    // Restart serial connection at new baud rate
+    m_GPS_Serial.end();
+    m_GPS_Serial.begin(m_baudRate);
+    vTaskDelay(pdMS_TO_TICKS(100));
 
-  // m_GPS_Module.setSerialRate(115200);
-  // m_GPS_Serial.begin(115200);
+    // Verify connection at new baud rate
+    if (!m_GPS_Module.isConnected()) {
+      UART_USB.println(F("Failed to reconnect at new baud rate!"));
+      return false;
+    }
+
+    m_GPS_Module.saveConfigSelective(VAL_CFG_SUBSEC_IOPORT);  // Save port settings
+  }
 
   if (!m_GPS_Module.setNavigationFrequency(m_navFreq)) return false;  // Produce #N solutions per second
-
-  if (!m_GPS_Module.setUART1Output(COM_TYPE_UBX)) return false;  // Set the UART1 port to output UBX only (turn off NMEA noise)
+  if (!m_GPS_Module.setUART1Output(COM_TYPE_UBX)) return false;       // Set the UART1 port to output UBX only (turn off NMEA noise)
+  // if (!m_GPS_Module.setAutoPVTcallbackPtr(&GPS_Talker::loadPVTData)) return false;
 
   // if (!m_GPS_Module.setAutoPVTcallbackPtr(PVTCallback)) return false;  // Set the callback for PVT messages // NOTE: This doesn't seem to work ATM
 
@@ -37,21 +61,15 @@ bool GPS_Talker::begin(unsigned long baudRate, uint8_t navFreq) {
   return m_initialised;
 }
 
-// void GPS_Talker::PVTCallback(UBX_NAV_PVT_data_t* ubxDataStruct) {
-//   UART_USB.println(F("PVT Callback triggered. Processing data..."));
-//   if (ubxDataStruct->flags.bits.gnssFixOK == 1) {
-//     m_instance->m_gpsData.latitude = ubxDataStruct->lat * 1e-7f;     // Latitude in degrees (float)
-//     m_instance->m_gpsData.longitude = ubxDataStruct->lon * 1e-7f;    // Longitude in degrees (float)
-//     m_instance->m_gpsData.altitude = ubxDataStruct->hMSL / 1000.0f;  // Altitude above Mean Sea Level in meters (float)
-
-//     // time in UTC
-//     m_instance->m_gpsData.hour = ubxDataStruct->hour;
-//     m_instance->m_gpsData.minute = ubxDataStruct->min;
-//     m_instance->m_gpsData.second = ubxDataStruct->sec;
-
-//     m_instance->m_newData = true;
-//   }
-// }
+// Print PVT data callback function
+void GPS_Talker::loadPVTData(UBX_NAV_PVT_data_t* ubxDataStruct) {
+  if (ubxDataStruct->flags.bits.gnssFixOK == 1 && m_instance) {
+    m_instance->m_gpsData.latitude = ubxDataStruct->lat * 1e-7f;     // Latitude in degrees (float)
+    m_instance->m_gpsData.longitude = ubxDataStruct->lon * 1e-7f;    // Longitude in degrees (float)
+    m_instance->m_gpsData.altitude = ubxDataStruct->hMSL / 1000.0f;  // Altitude above Mean Sea Level in meters (float)
+    m_instance->m_newData = true;
+  }
+}
 
 void GPS_Talker::timePulseISR() {
   if (m_instance) {
@@ -75,20 +93,29 @@ void GPS_Talker::hardwareReset() {
 
 // this should be called regularly
 bool GPS_Talker::checkNewData() {
+  // BUG: getPVT is using ~50ms to return, the rest is another ~50ms. Limiting the rate to 10Hz.
+  unsigned long startMicros;  // Start timing
+  unsigned long elapsedMicros = 0;
+  startMicros = micros();  // Start timing
   if (m_GPS_Module.getPVT() == true) {
     if (m_GPS_Module.getSIV() > 0) {
       m_gpsData.latitude = m_GPS_Module.getLatitude() * 1e-7f;
       m_gpsData.longitude = m_GPS_Module.getLongitude() * 1e-7f;
       m_gpsData.altitude = m_GPS_Module.getAltitudeMSL() / 1000.0f;
-      m_gpsData.hour = m_GPS_Module.getHour();
-      m_gpsData.minute = m_GPS_Module.getMinute();
-      m_gpsData.second = m_GPS_Module.getSecond();
       m_gpsData.nFixes = m_GPS_Module.getSIV();
+      elapsedMicros = micros() - startMicros;  // Calculate elapsed time
+
+      // NOTE: this data isn't even used
+      // m_gpsData.hour = m_GPS_Module.getHour();
+      // m_gpsData.minute = m_GPS_Module.getMinute();
+      // m_gpsData.second = m_GPS_Module.getSecond();
 
       // printGPSData(&m_gpsData);
       m_newData = true;
     }
   }
+
+  // UART_USB.printf("%lu us\n", elapsedMicros);
   return m_newData;
 }
 

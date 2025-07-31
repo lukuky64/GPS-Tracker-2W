@@ -1,17 +1,11 @@
-/*
-  Example: Print GNSS Position Data (UBX-NAV-PVT) over UART
-  By: GitHub Copilot
-  Based on SparkFun Example1_AutoPVT and Example2 (UART)
-*/
-
 #include <SparkFun_u-blox_GNSS_v3.h>
 SFE_UBLOX_GNSS_SERIAL myGNSS;
 
 #define mySerial Serial2  // Use Serial2 for UART
 
 void setup() {
+  delay(2000);
   Serial.begin(115200);
-  delay(1000);
   Serial.println("SparkFun u-blox GNSS Auto PVT Example (UART)");
 
   mySerial.setRX(21);

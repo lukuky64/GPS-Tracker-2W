@@ -25,21 +25,14 @@ void unpackSYSData(SYS_DATA *sysData, const MSG_PACKET *msgPacket) {
 }
 
 void printGPSData(const GPS_DATA *gpsData) {
-  UART_USB.print(F("Latitude: "));
-  UART_USB.print((gpsData->latitude), 6);
-  UART_USB.print(F("° \t"));
-  UART_USB.print(F("Longitude: "));
-  UART_USB.print((gpsData->longitude), 6);
-  UART_USB.print(F("° \t"));
-  UART_USB.print(F("Altitude: "));
-  UART_USB.print((gpsData->altitude), 1);
-  UART_USB.println(F("m"));
+  char buffer[128];
+  // 5dp for latitude and longitude readings gives 1.11m precision
+  snprintf(buffer, sizeof(buffer), "Latitude: %.5f° \tLongitude: %.5f° \tAltitude: %.1fm", gpsData->latitude, gpsData->longitude, gpsData->altitude);
+  UART_USB.println(buffer);
 }
 
 void printSYSData(const SYS_DATA *sysData) {
-  UART_USB.print(F("Battery Voltage: "));
-  UART_USB.print(sysData->batteryVoltage);
-  UART_USB.print(F(" V\t"));
-  UART_USB.print(F("RF Power: "));
-  UART_USB.println(sysData->rfPower);
+  char buffer[64];
+  snprintf(buffer, sizeof(buffer), "Battery Voltage: %.2f V\tRF Power: %d", sysData->batteryVoltage, sysData->rfPower);
+  UART_USB.println(buffer);
 }

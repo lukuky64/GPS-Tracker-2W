@@ -34,14 +34,16 @@
 #define LED2_PIN 18
 
 // -------------------- CONST DEFINITIONS --------------------
-#define GPS_BAUD_RATE 115200   // Default baud rate for u-blox M10 module = 9600, but i've changed this to 115200 for faster communication
-#define GPS_UPDATE_FREQ 10     // GPS update frequency - reduced from 20 to match hardware capability
+
+// 250000
+#define GPS_BAUD_RATE 250000   // Default baud rate for u-blox M10 module = 9600, but i've changed this to 115200 for faster communication
+#define GPS_UPDATE_FREQ 20     // GPS update frequency - reduced from 20 to match hardware capability
 #define GPS_FILTER_ALPHA 0.1f  // Alpha value for exponential filter on GPS data
 
 #define RF_BAUD_RATE 9600       // Default baud rate for RF module
 #define RF_BROADCAST_FREQ 0.2f  // Broadcast frequency
 
-#define ALTITUDE_THRESHOLD 200.0f  // Altitude threshold in meters for rocket state detection
+#define ALTITUDE_THRESHOLD 500.0f  // Altitude threshold in meters for rocket state detection
 
 // TODO: Calibrate this
 #define BATT_SCALE_FACTOR 2.8f  // Voltage divider scaling.

@@ -1,7 +1,9 @@
 #pragma once
 
 #include <Arduino.h>
+#include <FreeRTOS.h>
 #include <SparkFun_u-blox_GNSS_v3.h>
+#include <task.h>
 
 #include "messages.hpp"
 
@@ -25,7 +27,7 @@ class GPS_Talker {
 
   bool checkNewData();
 
-  bool checkTimePulse();  // Check if time pulse event occurred
+  static void loadPVTData(UBX_NAV_PVT_data_t* ubxDataStruct);
 
   GPS_DATA getData();
 
