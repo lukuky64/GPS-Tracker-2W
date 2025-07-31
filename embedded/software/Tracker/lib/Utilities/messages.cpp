@@ -27,7 +27,7 @@ void unpackSYSData(SYS_DATA *sysData, const MSG_PACKET *msgPacket) {
 void printGPSData(const GPS_DATA *gpsData) {
   char buffer[128];
   // 5dp for latitude and longitude readings gives 1.11m precision
-  snprintf(buffer, sizeof(buffer), "Latitude: %.5f° \tLongitude: %.5f° \tAltitude: %.1fm", gpsData->latitude, gpsData->longitude, gpsData->altitude);
+  snprintf(buffer, sizeof(buffer), "Latitude: %.5f \tLongitude: %.5f \tAltitude: %.1fm \tFixes: %d", gpsData->latitude, gpsData->longitude, gpsData->altitude, gpsData->nFixes);
   UART_USB.println(buffer);
 }
 

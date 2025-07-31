@@ -172,9 +172,8 @@ void Control::GPS_aquisition_task() {
       unsigned long currentTime = millis();
       if (dataProcessed && (currentTime - lastPrintTime) > 1000) {
         lastPrintTime = currentTime;
-        char buffer[128];
-        snprintf(buffer, sizeof(buffer), "Local GPS #%lu: Lat=%.5f, Lon=%.5f, Alt=%.1fm, Fixes=%d", updateCount, localGPSData.latitude, localGPSData.longitude, localGPSData.altitude, localGPSData.nFixes);
-        UART_USB.println(buffer);
+        UART_USB.print("Local GPS: ");
+        printGPSData(&localGPSData);  // Print the local copy of GPS data
       }
     } else {
       // UART_USB.println("No new GPS data available");

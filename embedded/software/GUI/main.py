@@ -1,0 +1,195 @@
+# live_map.py
+
+from flask import Flask, render_template_string, jsonify
+import folium
+import threading
+import time
+import random
+import serial
+import re
+import glob
+
+app = Flask(__name__)
+gps_data = {"lat": -33.8688, "lon": 151.2093}
+gps_data = {
+    "local": {"lat": -33.8688, "lon": 151.2093},
+    "tracker": None
+}
+HTML_TEMPLATE = """
+<!DOCTYPE html>
+<html>
+<head>
+    <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    crossorigin=""
+    />
+    <meta charset="utf-8">
+    <title>GPS Tracker</title>
+    <style>
+    html, body {
+        height: 100%;
+        margin: 0;
+        padding: 0;
+        font-family: 'Segoe UI', Arial, sans-serif;
+    }
+    #map {
+        height: 90vh;
+        min-height: 400px;
+        width: 100%;
+        background: #eee;
+    }
+    h2 {
+        text-align: center;
+    }
+</style>
+</head>
+<body>
+    <h2>GPS Tracker</h2>
+    <div id="map"></div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+            crossorigin=""></script>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('DOM loaded');
+            var mapDiv = document.getElementById('map');
+            console.log('mapDiv:', mapDiv);
+            console.log('Leaflet L:', typeof L);
+            var local = {{ local|tojson }};
+            var tracker = {{ tracker|tojson }};
+            var mapCenter = local ? [local.lat, local.lon] : [0, 0];
+            var map = L.map('map').setView(mapCenter, 15);
+
+            L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+                attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community',
+                maxZoom: 18
+            }).addTo(map);
+
+            var localMarker = null;
+            var trackerMarker = null;
+
+            function createOrUpdateMarker(marker, lat, lon, color, label) {
+                if (marker) {
+                    marker.setLatLng([lat, lon]);
+                    marker.setPopupContent(label).openPopup();
+                    return marker;
+                } else {
+                    var icon = L.icon({
+                        iconUrl: color === 'blue' ? 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-blue.png' : 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png',
+                        shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+                        iconSize: [25, 41],
+                        iconAnchor: [12, 41],
+                        popupAnchor: [1, -34],
+                        shadowSize: [41, 41]
+                    });
+                    var m = L.marker([lat, lon], {icon: icon}).addTo(map);
+                    m.bindPopup(label).openPopup();
+                    return m;
+                }
+            }
+
+            async function updatePosition() {
+                try {
+                    const response = await fetch("/position");
+                    const data = await response.json();
+                    if (data.local) {
+                        localMarker = createOrUpdateMarker(
+                            localMarker,
+                            data.local.lat,
+                            data.local.lon,
+                            'blue',
+                            `Local GPS<br>Lat: ${data.local.lat.toFixed(5)}, Lon: ${data.local.lon.toFixed(5)}`
+                        );
+                        map.setView([data.local.lat, data.local.lon]);
+                    }
+                    if (data.tracker) {
+                        let popupText = `Tracker GPS<br>Lat: ${data.tracker.lat.toFixed(5)}, Lon: ${data.tracker.lon.toFixed(5)}`;
+                        if (data.tracker.altitude !== undefined && data.tracker.fixes !== undefined) {
+                            popupText += `<br>Alt: ${data.tracker.altitude}m<br>Fixes: ${data.tracker.fixes}`;
+                        }
+                        trackerMarker = createOrUpdateMarker(
+                            trackerMarker,
+                            data.tracker.lat,
+                            data.tracker.lon,
+                            'red',
+                            popupText
+                        );
+                    }
+                } catch (e) {
+                    console.error("Failed to fetch GPS data:", e);
+                }
+            }
+
+            setInterval(updatePosition, 1000);  // Update every 1 second
+        });
+        window.onerror = function(message, source, lineno, colno, error) {
+            console.log('JS Error:', message, 'at', source, lineno + ':' + colno);
+        };
+    </script>
+</body>
+</html>
+"""
+
+@app.route('/')
+def map_view():
+    return render_template_string(
+        HTML_TEMPLATE,
+        local=gps_data["local"],
+        tracker=gps_data["tracker"] if gps_data["tracker"] else None,
+    )
+
+@app.route('/position')
+def get_position():
+    return jsonify(gps_data)
+
+# --- SERIAL READER THREAD ---
+def read_serial_gps():
+    local_pattern = re.compile(r"Local GPS: Latitude:\s*(-?\d+\.\d+)\s+Longitude:\s*(-?\d+\.\d+)")
+    tracker_pattern = re.compile(r"Tracker GPS: Latitude:\s*(-?\d+\.\d+)\s+Longitude:\s*(-?\d+\.\d+)\s+Altitude:\s*([\d\.]+)m\s+Fixes:\s*(\d+)")
+    ser = None
+    while True:
+        if ser is None or not ser.is_open:
+            port_list = glob.glob('/dev/tty.usbmodem*')
+            if not port_list:
+                print('No serial device found')
+                time.sleep(2)
+                continue
+            port = port_list[0]
+            try:
+                ser = serial.Serial(port, 115200, timeout=1)
+                print(f'Serial port connected: {port}')
+            except Exception as e:
+                print('Serial port error:', e)
+                time.sleep(2)
+                continue
+        try:
+            line = ser.readline().decode('latin-1').strip()
+            local_match = local_pattern.search(line)
+            tracker_match = tracker_pattern.search(line)
+            if local_match:
+                gps_data["local"] = {
+                    "lat": float(local_match.group(1)),
+                    "lon": float(local_match.group(2))
+                }
+            elif tracker_match:
+                gps_data["tracker"] = {
+                    "lat": float(tracker_match.group(1)),
+                    "lon": float(tracker_match.group(2)),
+                    "altitude": float(tracker_match.group(3)),
+                    "fixes": int(tracker_match.group(4))
+                }
+        except Exception as e:
+            print('Serial read error:', e)
+            try:
+                ser.close()
+            except:
+                pass
+            ser = None
+            time.sleep(2)
+        time.sleep(0.5)
+
+if __name__ == '__main__':
+    threading.Thread(target=read_serial_gps, daemon=True).start()
+    app.run(debug=True, host='0.0.0.0', port=5050)
