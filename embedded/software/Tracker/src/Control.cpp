@@ -164,7 +164,7 @@ void Control::GPS_aquisition_task() {
             updateStartingAltitude(thisData.GPSData.altitude);
           }
         } else {
-          // UART_USB.println("Missed GPS sample: mutex not acquired");
+          CONTROL_DEBUG_PRINTLN("Missed GPS sample: mutex not acquired");
         }
       }
 
@@ -175,8 +175,6 @@ void Control::GPS_aquisition_task() {
         UART_USB.print("Local GPS: ");
         printGPSData(&localGPSData);  // Print the local copy of GPS data
       }
-    } else {
-      // UART_USB.println("No new GPS data available");
     }
 
     // elapsedMicros = micros() - startMicros;  // Calculate elapsed time
@@ -184,7 +182,6 @@ void Control::GPS_aquisition_task() {
     // Use proper GPS timing - checkNewData() blocks until new data is available
     // So we can use the original timing since the blocking handles the real rate
     vTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(GPSAquisition_MS));
-    // UART_USB.println("Looping GPS");
   }
 }
 
@@ -219,18 +216,8 @@ void Control::RF_broadcast_task() {
 
     if (acquired) {  // Send the packed data via RF
       if (rfTalker.sendMessage(&msgPacket)) {
-#if DEBUG_VERBOSE
         UART_USB.println(F("RF message sent successfully!"));
-        // GPS data is already printed by GPS_aquisition_task, only print SYS data here
-        printSYSData(&thisData.SYSData);
-#endif
-      } else {
-        UART_USB.println(F("Failed to send RF message."));
       }
-    } else {
-#if DEBUG_VERBOSE
-      UART_USB.println(F("RF broadcast: failed to acquire mutexes"));
-#endif
     }
 
     // Use vTaskDelayUntil for precise timing
@@ -306,7 +293,7 @@ void Control::Rocket_state_task() {
     // TODO: look into geofencing (addGeofence).
     if (currentAltitude - m_startingAltitude > ALTITUDE_THRESHOLD) {
       rfBlast = true;
-      rfTalker.setRFPower(22);  // Set RF power to high for blasting
+      rfTalker.setRFPower(33);  // Set RF power to high for blasting
     }
 
     vTaskDelay(pdMS_TO_TICKS(1'000));  // Check every 1 second

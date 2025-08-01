@@ -14,6 +14,24 @@
 #include "hardware/watchdog.h"
 #include "messages.hpp"
 
+#ifdef Control_DEBUG
+#define CONTROL_DEBUG_PRINT(...) \
+  {                              \
+    UART_USB.print(__VA_ARGS__); \
+  }
+#define CONTROL_DEBUG_PRINTLN(...) \
+  {                                \
+    UART_USB.println(__VA_ARGS__); \
+  }
+#else
+#define CONTROL_DEBUG_PRINT(...) \
+  {                              \
+  }
+#define CONTROL_DEBUG_PRINTLN(...) \
+  {                                \
+  }
+#endif
+
 class Control {
  public:
   Control();

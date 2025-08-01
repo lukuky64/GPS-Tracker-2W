@@ -1,21 +1,26 @@
-# live_map.py
+# TODO:
+# Ability to save location data offline
 
-from flask import Flask, render_template_string, jsonify
+# RUN: python /Users/lucas/Documents/GitHub/GPS-Tracker-2W/embedded/software/GUI/main.py
+
+from flask import Flask, render_template_string, jsonify, send_from_directory
 import folium
 import threading
 import time
 import random
 import serial
+import io
 import re
 import glob
 import time as pytime
 
 app = Flask(__name__)
-gps_data = {"lat": -33.8688, "lon": 151.2093}
+gps_data = {"lat": -33.8708, "lon": 151.2073}
 gps_data = {
-    "local": {"lat": -33.8688, "lon": 151.2093, "last_update": pytime.time()},
+    "local": {"lat": -33.8708, "lon": 151.2073, "last_update": pytime.time()},
     "tracker": None
 }
+last_serial_message = {'msg': ''}
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html>
@@ -54,19 +59,37 @@ HTML_TEMPLATE = """
 
     <script>
         document.addEventListener('DOMContentLoaded', function() {
-            console.log('DOM loaded');
             var mapDiv = document.getElementById('map');
-            console.log('mapDiv:', mapDiv);
-            console.log('Leaflet L:', typeof L);
             var local = {{ local|tojson }};
             var tracker = {{ tracker|tojson }};
             var mapCenter = local ? [local.lat, local.lon] : [0, 0];
             var map = L.map('map').setView(mapCenter, 15);
 
-            L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+            // Online tile layer
+            var onlineLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
                 attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community',
                 maxZoom: 18
-            }).addTo(map);
+            });
+            // Offline tile layer
+            var offlineLayer = L.tileLayer('/tiles/{z}/{x}/{y}.png', {
+                attribution: 'Offline tiles',
+                maxZoom: 12,
+                errorTileUrl: 'https://upload.wikimedia.org/wikipedia/commons/6/65/No-Image-Placeholder.svg'
+            });
+
+            // Add the correct layer based on connectivity
+            function setTileLayer() {
+                if (navigator.onLine) {
+                    if (map.hasLayer(offlineLayer)) map.removeLayer(offlineLayer);
+                    if (!map.hasLayer(onlineLayer)) map.addLayer(onlineLayer);
+                } else {
+                    if (map.hasLayer(onlineLayer)) map.removeLayer(onlineLayer);
+                    if (!map.hasLayer(offlineLayer)) map.addLayer(offlineLayer);
+                }
+            }
+            setTileLayer();
+            window.addEventListener('online', setTileLayer);
+            window.addEventListener('offline', setTileLayer);
 
             var localMarker = null;
             var trackerMarker = null;
@@ -101,6 +124,18 @@ HTML_TEMPLATE = """
                 try {
                     const response = await fetch("/position");
                     const data = await response.json();
+                    // Fetch and print the latest serial message only if new
+                    try {
+                        const msgResp = await fetch("/last_serial_message");
+                        const msgData = await msgResp.json();
+                        if (!window._lastSerialMsg) window._lastSerialMsg = "";
+                        if (msgData.msg && msgData.msg !== window._lastSerialMsg) {
+                            console.log("Serial:", msgData.msg);
+                            window._lastSerialMsg = msgData.msg;
+                        }
+                    } catch (e) {
+                        // Ignore errors
+                    }
                     const now = Date.now() / 1000;
                     if (data.local) {
                         localData = data.local;
@@ -161,6 +196,10 @@ HTML_TEMPLATE = """
 </body>
 </html>
 """
+# Endpoint to serve offline tiles
+@app.route('/tiles/<int:z>/<int:x>/<int:y>.png')
+def serve_tile(z, x, y):
+    return send_from_directory('tiles', f'{z}/{x}/{y}.png')
 
 @app.route('/')
 def map_view():
@@ -174,11 +213,17 @@ def map_view():
 def get_position():
     return jsonify(gps_data)
 
+# Endpoint to get the last serial message
+@app.route('/last_serial_message')
+def last_serial_message_api():
+    return jsonify(last_serial_message)
+
 # --- SERIAL READER THREAD ---
 def read_serial_gps():
     local_pattern = re.compile(r"Local GPS: Latitude:\s*(-?\d+\.\d+)\s+Longitude:\s*(-?\d+\.\d+)")
     tracker_pattern = re.compile(r"Tracker GPS: Latitude:\s*(-?\d+\.\d+)\s+Longitude:\s*(-?\d+\.\d+)\s+Altitude:\s*([\d\.]+)m\s+Fixes:\s*(\d+)")
     ser = None
+    sio = None
     while True:
         if ser is None or not ser.is_open:
             port_list = glob.glob('/dev/tty.usbmodem*')
@@ -188,14 +233,24 @@ def read_serial_gps():
                 continue
             port = port_list[0]
             try:
-                ser = serial.Serial(port, 115200, timeout=1)
+                ser = serial.Serial(port, 250000, timeout=1)
+                sio = io.TextIOWrapper(io.BufferedRWPair(ser, ser), encoding='utf-8', errors='replace', newline='\n')
                 print(f'Serial port connected: {port}')
             except Exception as e:
                 print('Serial port error:', e)
                 time.sleep(2)
                 continue
         try:
-            line = ser.readline().decode('latin-1').strip()
+            line = sio.readline()
+            if not line:
+                time.sleep(0.1)
+                continue
+            line = line.strip()
+            # Skip lines that are too short to be valid
+            if len(line) < 10:
+                continue
+            global last_serial_message
+            last_serial_message['msg'] = line
             local_match = local_pattern.search(line)
             tracker_match = tracker_pattern.search(line)
             if local_match:
@@ -213,14 +268,15 @@ def read_serial_gps():
                     "last_update": pytime.time()
                 }
         except Exception as e:
-            print('Serial read error:', e)
-            try:
-                ser.close()
-            except:
-                pass
-            ser = None
-            time.sleep(2)
-        time.sleep(0.5)
+            # print('Serial read error:', e)
+            # # try:
+            # #     ser.close()
+            # # except:
+            # #     pass
+            # ser = None
+            # sio = None
+            time.sleep(0.05)
+        time.sleep(0.1)
 
 if __name__ == '__main__':
     threading.Thread(target=read_serial_gps, daemon=True).start()

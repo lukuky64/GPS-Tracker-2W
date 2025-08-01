@@ -7,6 +7,14 @@
 
 #define FREQUENCY_915
 
+enum E22_900T33S_POWER {
+  POWER_33 = 0b00,
+  POWER_30 = 0b01,
+  POWER_27 = 0b10,
+  POWER_24 = 0b11
+
+};
+
 class RF_Talker {
  public:
   RF_Talker(HardwareSerial& serial, uint8_t ctrl0Pin = 255, uint8_t ctrl1Pin = 255, uint8_t statusPin = 255, uint8_t ledPin = 255);
