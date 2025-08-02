@@ -1,7 +1,7 @@
 # TODO:
 # Ability to save location data offline
 
-# RUN: python /Users/lucas/Documents/GitHub/GPS-Tracker-2W/embedded/software/GUI/main.py
+# RUN: p/Users/lucas/.pyenv/versions/3.12.2/bin/python /Users/lucas/Documents/GitHub/GPS-Tracker-2W/embedded/software/GUI/main.py
 
 from flask import Flask, render_template_string, jsonify, send_from_directory
 import folium
@@ -73,7 +73,7 @@ HTML_TEMPLATE = """
             // Offline tile layer
             var offlineLayer = L.tileLayer('/tiles/{z}/{x}/{y}.png', {
                 attribution: 'Offline tiles',
-                maxZoom: 12,
+                maxZoom: 11,
                 errorTileUrl: 'https://upload.wikimedia.org/wikipedia/commons/6/65/No-Image-Placeholder.svg'
             });
 
