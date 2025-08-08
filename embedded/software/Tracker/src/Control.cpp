@@ -24,9 +24,6 @@ bool Control::setup() {
   UART_RF.setRX(UART_RF_RX);
   UART_RF.setTX(UART_RF_TX);
 
-  // set rx to pull up to test
-  pinMode(UART_RF_RX, INPUT_PULLUP);
-
   UART_GPS.setRX(UART_GPS_RX);
   UART_GPS.setTX(UART_GPS_TX);
 
@@ -117,7 +114,7 @@ void Control::heartbeat_task() {
     // Kick (refresh) the watchdog every loop
     watchdog_update();
 
-    vTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(5'000));
+    vTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(3'000));
     // checkTaskStack();
   }
 }
@@ -195,6 +192,8 @@ void Control::updateStartingAltitude(float altitude) {
 }
 
 void Control::RF_broadcast_task() {
+  // vTaskDelay(pdMS_TO_TICKS(1000));  // Short delay to unsync heartbeat
+
   TickType_t xLastWakeTime = xTaskGetTickCount();
 
   while (true) {

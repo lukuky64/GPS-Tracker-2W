@@ -1,6 +1,8 @@
 #pragma once
 
 #include <Arduino.h>
+#include <FreeRTOS.h>
+#include <task.h>
 
 #include "LoRa_E22.h"
 #include "messages.hpp"
