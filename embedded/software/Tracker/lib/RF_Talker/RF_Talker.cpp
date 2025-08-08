@@ -23,8 +23,9 @@ bool RF_Talker::begin() {
   Configuration configuration = *(Configuration*)c.data;
 
   configuration.OPTION.transmissionPower = mapRFPower(m_rfPower);
-  configuration.SPED.airDataRate = AIR_DATA_RATE_010_24;  // lower is better for long range. 2.4kbps
+  configuration.SPED.airDataRate = AIR_DATA_RATE_010_24;  // AIR_DATA_RATE_111_625;  // lower is better for long range. 2.4kbps
   configuration.CHAN = m_rfConfig.m_CHAN;
+  configuration.TRANSMISSION_MODE.enableRSSI = RSSI_ENABLED;
 
   ResponseStatus rs = m_e22Module->setConfiguration(configuration, WRITE_CFG_PWR_DWN_SAVE);
 
@@ -38,7 +39,7 @@ bool RF_Talker::begin() {
 }
 
 bool RF_Talker::sendMessage(const void* message) {
-  ResponseStatus rs = m_e22Module->sendFixedMessage(m_rfConfig.m_ADDH, m_rfConfig.m_ADDL, m_rfConfig.m_CHAN, &message, sizeof(MSG_PACKET));
+  ResponseStatus rs = m_e22Module->sendFixedMessage(m_rfConfig.m_ADDH, m_rfConfig.m_ADDL, m_rfConfig.m_CHAN, message, sizeof(MSG_PACKET));
   if (rs.code != E22_SUCCESS) {
     UART_USB.print("Error sending message: ");
     UART_USB.println(rs.getResponseDescription());
@@ -56,11 +57,17 @@ bool RF_Talker::available() {
 }
 
 bool RF_Talker::receiveMessage(ResponseContainer& response) {
-  response = m_e22Module->receiveMessage();
+  response = m_e22Module->receiveMessageRSSI();
   if (response.status.code != E22_SUCCESS) {
     UART_USB.print("Error receiving message: ");
     UART_USB.println(response.status.getResponseDescription());
     return false;
+  } else {
+    // FIX, values are either -127 (lowest value) or 0 (max value).
+    // print RSSI
+    // UART_USB.print("Received message with RSSI: ");
+    // UART_USB.print(-((int)response.rssi / 2));
+    // UART_USB.println(" dBm");
   }
   return true;
 }

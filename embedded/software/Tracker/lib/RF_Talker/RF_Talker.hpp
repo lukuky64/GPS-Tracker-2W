@@ -7,8 +7,6 @@
 #include "LoRa_E22.h"
 #include "messages.hpp"
 
-#define FREQUENCY_915
-
 enum E22_900T33S_POWER {
   POWER_33 = 0b00,
   POWER_30 = 0b01,

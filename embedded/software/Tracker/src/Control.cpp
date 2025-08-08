@@ -148,26 +148,26 @@ void Control::GPS_aquisition_task() {
           thisData.GPSData.altitude = filtered[0];
           thisData.GPSData.latitude = filtered[1];
           thisData.GPSData.longitude = filtered[2];
-
           localGPSData = thisData.GPSData;  // Copy for printing outside mutex
-          dataProcessed = true;
-          updateCount++;
-
-          // UART_USB.printf("updateCount: %lu\n", updateCount);
-
-          // 3 is enough for 3D fix. but 4 shows better results experimentally
-          if (thisData.GPSData.nFixes >= 4) {
-            GPS_update_count++;
-            updateStartingAltitude(thisData.GPSData.altitude);
-          }
         } else {
           CONTROL_DEBUG_PRINTLN("Missed GPS sample: mutex not acquired");
+        }
+
+        dataProcessed = true;
+        updateCount++;
+
+        // UART_USB.printf("updateCount: %lu\n", updateCount);
+
+        // 3 is enough for 3D fix. but 4 shows better results experimentally
+        if (localGPSData.nFixes >= 4) {
+          GPS_update_count++;
+          updateStartingAltitude(localGPSData.altitude);
         }
       }
 
       // Print GPS data every X seconds to monitor performance
       unsigned long currentTime = millis();
-      if (dataProcessed && (currentTime - lastPrintTime) > 1000) {
+      if (dataProcessed && (currentTime - lastPrintTime) > 5000) {
         lastPrintTime = currentTime;
         UART_USB.print("Local GPS: ");
         printGPSData(&localGPSData);  // Print the local copy of GPS data
@@ -197,7 +197,6 @@ void Control::RF_broadcast_task() {
   TickType_t xLastWakeTime = xTaskGetTickCount();
 
   while (true) {
-    // HACK: testing print data here while we don't have RF
     updateSYSData();
     MSG_PACKET msgPacket;
 
@@ -208,14 +207,27 @@ void Control::RF_broadcast_task() {
       SemaphoreGuard sysGuard(thisData.SYSDataMutex, pdMS_TO_TICKS(10));
 
       if (gpsGuard.acquired() && sysGuard.acquired()) {
+        memset(&msgPacket, 0, sizeof(msgPacket));
         packData(&msgPacket, &thisData.GPSData, &thisData.SYSData);
         acquired = true;
       }
     }
 
-    if (acquired) {  // Send the packed data via RF
+    // Send the packed data via RF
+    if (acquired) {
       if (rfTalker.sendMessage(&msgPacket)) {
-        UART_USB.println(F("RF message sent successfully!"));
+        // UART_USB.println(F("RF message sent successfully!"));
+        // print the sent data
+        // UART_USB.println(F("Sent RF Data: "));
+        // GPS_DATA tempGPSData;
+        UART_USB.print(F("Local SYS: "));
+        SYS_DATA tempSYSData;
+        unpackSYSData(&tempSYSData, &msgPacket);
+        printSYSData(&tempSYSData);
+        // unpackGPSData(&tempGPSData, &msgPacket);
+        // printGPSData(&tempGPSData);
+      } else {
+        UART_USB.println(F("Failed to send RF message!"));
       }
     }
 
@@ -231,7 +243,6 @@ void Control::RF_aquisition_task() {
       if (rfTalker.receiveMessage(response)) {
         MSG_PACKET unpackedData;
         unpackResponseData(&unpackedData, response);
-
         {
           SemaphoreGuard gpsGuard(thatData.GPSDataMutex);
           SemaphoreGuard sysGuard(thatData.SYSDataMutex);
@@ -239,8 +250,9 @@ void Control::RF_aquisition_task() {
             unpackGPSData(&thatData.GPSData, &unpackedData);
             unpackSYSData(&thatData.SYSData, &unpackedData);
 
-            UART_USB.print(F("Received RF Data: "));
+            UART_USB.print(F("Remote GPS: "));
             printGPSData(&thatData.GPSData);
+            UART_USB.print(F("Remote SYS: "));
             printSYSData(&thatData.SYSData);
           }
         }

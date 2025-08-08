@@ -2,16 +2,27 @@
 #pragma once
 #include <Arduino.h>
 #include <SparkFun_u-blox_GNSS_v3.h>
+#include <stddef.h>
+#include <stdint.h>
 
 #include "LoRa_E22.h"
 
+union FloatBytes {
+  float f;
+  uint8_t b[4];
+};
+
+// TODO: Add RSSI
+#pragma pack(push, 1)
 struct MSG_PACKET {
   byte latitude[4];
   byte longitude[4];
   byte altitude[4];
+  byte nFixes[1];
   byte batteryVoltage[1];
   byte rfPower[1];
 };
+#pragma pack(pop)
 
 struct GPS_DATA {
   float latitude;   // Latitude in degrees (float)
@@ -34,3 +45,4 @@ void unpackGPSData(GPS_DATA *gpsData, const MSG_PACKET *msgPacket);
 void unpackSYSData(SYS_DATA *sysData, const MSG_PACKET *msgPacket);
 void printGPSData(const GPS_DATA *gpsData);
 void printSYSData(const SYS_DATA *sysData);
+void printRawPacket(const MSG_PACKET *packet);

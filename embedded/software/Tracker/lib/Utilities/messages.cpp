@@ -1,22 +1,42 @@
 #include "messages.hpp"
 
+void printRawPacket(const MSG_PACKET *packet) {
+  const uint8_t *bytes = (const uint8_t *)packet;
+  for (size_t i = 0; i < sizeof(MSG_PACKET); ++i) {
+    UART_USB.printf("%02X ", bytes[i]);
+  }
+  UART_USB.println();
+}
+
 void packData(MSG_PACKET *packet, const GPS_DATA *gps, const SYS_DATA *sysData) {
-  memcpy(packet->latitude, &gps->latitude, 4);
-  memcpy(packet->longitude, &gps->longitude, 4);
-  memcpy(packet->altitude, &gps->altitude, 4);
-  packet->batteryVoltage[0] = (uint8_t)(sysData->batteryVoltage * 10);  // Scale to 0.1V
+  FloatBytes lat, lon, alt;
+  lat.f = gps->latitude;
+  lon.f = gps->longitude;
+  alt.f = gps->altitude;
+  memcpy(packet->latitude, lat.b, 4);
+  memcpy(packet->longitude, lon.b, 4);
+  memcpy(packet->altitude, alt.b, 4);
+  packet->nFixes[0] = gps->nFixes;
+  packet->batteryVoltage[0] = (uint8_t)(sysData->batteryVoltage * 10);
   packet->rfPower[0] = (uint8_t)(sysData->rfPower);
 }
 
 void unpackResponseData(MSG_PACKET *packet, const ResponseContainer &response) {
-  memcpy(packet, response.data.c_str(), sizeof(MSG_PACKET));
+  // memcpy(packet, response.data.c_str(), sizeof(MSG_PACKET));
+  // FIX: First 3 bytes are not part of the E22 packet
+  memcpy(packet, response.data.c_str() + 3, sizeof(MSG_PACKET));
   //
 }
 
 void unpackGPSData(GPS_DATA *gpsData, const MSG_PACKET *msgPacket) {
-  memcpy(&gpsData->latitude, msgPacket->latitude, sizeof(float));
-  memcpy(&gpsData->longitude, msgPacket->longitude, sizeof(float));
-  memcpy(&gpsData->altitude, msgPacket->altitude, sizeof(float));
+  FloatBytes lat, lon, alt;
+  memcpy(lat.b, msgPacket->latitude, 4);
+  memcpy(lon.b, msgPacket->longitude, 4);
+  memcpy(alt.b, msgPacket->altitude, 4);
+  gpsData->latitude = lat.f;
+  gpsData->longitude = lon.f;
+  gpsData->altitude = alt.f;
+  gpsData->nFixes = msgPacket->nFixes[0];
 }
 
 void unpackSYSData(SYS_DATA *sysData, const MSG_PACKET *msgPacket) {
