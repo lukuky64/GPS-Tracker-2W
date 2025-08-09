@@ -2,7 +2,7 @@
 # Ability to save location data offline
 
 # MAC
-# RUN: /Users/lucas/.pyenv/versions/3.12.2/bin/python /Users/lucas/Documents/GitHub/GPS-Tracker-2W/embedded/software/GUI/main.py
+# RUN: /Users/lucas/.pyenv/versions/3.12.2/bin/python /Users/lucas/Documents/GitHub/GPS-Tracker-2W/computer\ software/GUI/main.py
 
 # Windows
 # RUN: C:/Users/Lucas/Documents/GitHub/GPS-Tracker-2W/.venv/Scripts/python.exe "c:/Users/Lucas/Documents/GitHub/GPS-Tracker-2W/computer software/GUI/main.py"
