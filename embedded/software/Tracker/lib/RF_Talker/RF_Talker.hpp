@@ -7,6 +7,10 @@
 #include "LoRa_E22.h"
 #include "messages.hpp"
 
+/*
+There is a non-linear relationship between power and current. At the maximum power, the power
+supply efficiency is the highest current does not decrease proportionally with lower power.
+*/
 enum E22_900T33S_POWER {
   POWER_33 = 0b00,
   POWER_30 = 0b01,

@@ -2,7 +2,7 @@
 
 RF_Talker::RF_Talker(HardwareSerial& serial, uint8_t ctrl0Pin, uint8_t ctrl1Pin, uint8_t statusPin, uint8_t ledPin) : m_RF_Serial(serial), m_ctrl0Pin(ctrl0Pin), m_ctrl1Pin(ctrl1Pin), m_statusPin(statusPin), m_LED_Pin(ledPin) {
   m_e22Module = new LoRa_E22(&m_RF_Serial, m_statusPin, m_ctrl0Pin, m_ctrl1Pin);
-  m_rfConfig = {0xFF, 0xFF, 65};  // Broadcast address and channel 65  (850 + 65 = 915MHz -> lowest return loss for antenna selected). Looks like Chan = 80 is the upper limit
+  m_rfConfig = {0xFF, 0xFF, 65};  // Broadcast address and channel 65  (850.125 + 65 = 915.125 MHz -> lowest return loss for antenna selected). Looks like Chan = 80 is the upper limit (930.125 MHz)
   m_rfPower = 24;                 // Default RF power level
 }
 
@@ -65,9 +65,9 @@ bool RF_Talker::receiveMessage(ResponseContainer& response) {
   } else {
     // FIX, values are either -127 (lowest value) or 0 (max value).
     // print RSSI
-    // UART_USB.print("Received message with RSSI: ");
-    // UART_USB.print(-((int)response.rssi / 2));
-    // UART_USB.println(" dBm");
+    UART_USB.print("Received message with RSSI: ");
+    UART_USB.print(-(256 - (int)response.rssi));
+    UART_USB.println(" dBm");
   }
   return true;
 }
