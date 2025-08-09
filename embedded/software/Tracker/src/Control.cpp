@@ -196,6 +196,8 @@ void Control::RF_broadcast_task() {
 
   TickType_t xLastWakeTime = xTaskGetTickCount();
 
+  uint8_t RF_fail_count = 0;
+
   while (true) {
     updateSYSData();
     MSG_PACKET msgPacket;
@@ -216,18 +218,19 @@ void Control::RF_broadcast_task() {
     // Send the packed data via RF
     if (acquired) {
       if (rfTalker.sendMessage(&msgPacket)) {
-        // UART_USB.println(F("RF message sent successfully!"));
-        // print the sent data
-        // UART_USB.println(F("Sent RF Data: "));
-        // GPS_DATA tempGPSData;
+        RF_fail_count = 0;
         UART_USB.print(F("Local SYS: "));
         SYS_DATA tempSYSData;
         unpackSYSData(&tempSYSData, &msgPacket);
         printSYSData(&tempSYSData);
-        // unpackGPSData(&tempGPSData, &msgPacket);
-        // printGPSData(&tempGPSData);
       } else {
         UART_USB.println(F("Failed to send RF message!"));
+        RF_fail_count++;
+
+        if (RF_fail_count > 5) {
+          // restarting system
+          restartDevice();
+        }
       }
     }
 

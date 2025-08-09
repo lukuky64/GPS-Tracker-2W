@@ -39,6 +39,7 @@ class RF_Talker {
   void setupLED(uint8_t ledPin);
   void toggleLED();
   void setLED(bool state);
+  void restart();
 
  private:
   LoRa_E22* m_e22Module;

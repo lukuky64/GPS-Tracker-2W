@@ -1,0 +1,17 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Run GUI",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/computer software/GUI/main.py",
+      "python": "C:/Users/Lucas/Documents/GitHub/GPS-Tracker-2W/.venv/Scripts/python.exe",
+      "console": "integratedTerminal",
+      "justMyCode": true,
+      "env": {
+        "FLASK_ENV": "development"
+      }
+    }
+  ]
+}

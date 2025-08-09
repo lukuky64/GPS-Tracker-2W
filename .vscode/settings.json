@@ -1,0 +1,9 @@
+{
+  "python.defaultInterpreterPath": "C:/Users/Lucas/Documents/GitHub/GPS-Tracker-2W/.venv/Scripts/python.exe",
+  "python.terminal.activateEnvironment": true,
+  "python.analysis.diagnosticMode": "workspace",
+  "python.analysis.typeCheckingMode": "basic",
+  "code-runner.executorMap": {
+    "python": "C:/Users/Lucas/Documents/GitHub/GPS-Tracker-2W/.venv/Scripts/python.exe"
+  }
+}

@@ -1,21 +1,23 @@
 # TODO:
 # Ability to save location data offline
 
+# MAC
 # RUN: /Users/lucas/.pyenv/versions/3.12.2/bin/python /Users/lucas/Documents/GitHub/GPS-Tracker-2W/embedded/software/GUI/main.py
 
+# Windows
+# RUN: C:/Users/Lucas/Documents/GitHub/GPS-Tracker-2W/.venv/Scripts/python.exe "c:/Users/Lucas/Documents/GitHub/GPS-Tracker-2W/computer software/GUI/main.py"
+
 from flask import Flask, render_template_string, jsonify, send_from_directory
-import folium
 import threading
 import time
-import random
 import serial
-import io
 import re
 import glob
+import os
+from serial.tools import list_ports
 import time as pytime
 
 app = Flask(__name__)
-gps_data = {"lat": -33.8708, "lon": 151.2073}
 gps_data = {
     "local": {"lat": -33.8708, "lon": 151.2073, "last_update": pytime.time()},
     "tracker": None
@@ -47,6 +49,21 @@ HTML_TEMPLATE = """
     }
     h2 {
         text-align: center;
+    }
+    /* Always-visible labels above markers */
+    .marker-label.leaflet-tooltip {
+        background: rgba(255,255,255,0.95);
+        color: #111;
+        border: 1px solid #555;
+        border-radius: 4px;
+        padding: 4px 6px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.25);
+        font-size: 12px;
+    }
+    .route-label.leaflet-tooltip {
+        background: rgba(255, 255, 200, 0.95);
+        border-color: #777;
+        font-weight: 600;
     }
 </style>
 </head>
@@ -99,11 +116,24 @@ HTML_TEMPLATE = """
             var trackerAge = 0;
             var localData = null;
             var trackerData = null;
+            var routeLine = null;
+            var distanceTooltip = null;
 
             function createOrUpdateMarker(marker, lat, lon, color, label) {
+                var isLocal = (color === 'blue');
+                var tooltipOpts = {
+                    permanent: true,
+                    direction: isLocal ? 'bottom' : 'top',
+                    offset: isLocal ? [0, 30] : [0, -30],
+                    className: 'marker-label ' + (isLocal ? 'local' : 'tracker')
+                };
                 if (marker) {
                     marker.setLatLng([lat, lon]);
-                    marker.setPopupContent(label).openPopup();
+                    if (marker.getTooltip && marker.getTooltip()) {
+                        marker.setTooltipContent(label);
+                    } else {
+                        marker.bindTooltip(label, tooltipOpts);
+                    }
                     return marker;
                 } else {
                     var icon = L.icon({
@@ -114,8 +144,8 @@ HTML_TEMPLATE = """
                         popupAnchor: [1, -34],
                         shadowSize: [41, 41]
                     });
-                    var m = L.marker([lat, lon], {icon: icon}).addTo(map);
-                    m.bindPopup(label).openPopup();
+                    var m = L.marker([lat, lon], {icon: icon, zIndexOffset: isLocal ? 0 : 0}).addTo(map);
+                    m.bindTooltip(label, tooltipOpts);
                     return m;
                 }
             }
@@ -137,19 +167,24 @@ HTML_TEMPLATE = """
                         // Ignore errors
                     }
                     const now = Date.now() / 1000;
-                    if (data.local) {
-                        localData = data.local;
-                        lastLocalUpdate = data.local.last_update;
-                        localAge = Math.round(now - lastLocalUpdate);
-                        localMarker = createOrUpdateMarker(
-                            localMarker,
-                            data.local.lat,
-                            data.local.lon,
-                            'blue',
-                            `Local GPS<br>Lat: ${data.local.lat.toFixed(5)}, Lon: ${data.local.lon.toFixed(5)}<br><span id='local-age'>Updated ${localAge} sec ago</span>`
-                        );
-                        map.setView([data.local.lat, data.local.lon]);
-                    }
+                            if (data.local) {
+                                localData = data.local;
+                                lastLocalUpdate = data.local.last_update;
+                                localAge = Math.round(now - lastLocalUpdate);
+                                let localText = `Local GPS<br>Lat: ${data.local.lat.toFixed(5)}, Lon: ${data.local.lon.toFixed(5)}`;
+                                if (data.local.altitude !== undefined && data.local.fixes !== undefined) {
+                                    localText += `<br>Alt: ${data.local.altitude}m<br>Fixes: ${data.local.fixes}`;
+                                }
+                                localText += `<br><span id='local-age'>Updated ${localAge} sec ago</span>`;
+                                localMarker = createOrUpdateMarker(
+                                    localMarker,
+                                    data.local.lat,
+                                    data.local.lon,
+                                    'blue',
+                                    localText
+                                );
+                                map.setView([data.local.lat, data.local.lon]);
+                            }
                     if (data.tracker) {
                         trackerData = data.tracker;
                         lastTrackerUpdate = data.tracker.last_update;
@@ -167,9 +202,61 @@ HTML_TEMPLATE = """
                             popupText
                         );
                     }
+                    // Draw/update line and distance when both markers exist
+                    if (localData && trackerData) {
+                        const latlngs = [
+                            [localData.lat, localData.lon],
+                            [trackerData.lat, trackerData.lon]
+                        ];
+                        const meters = haversineDistance(localData.lat, localData.lon, trackerData.lat, trackerData.lon);
+                        const label = `Distance: ${formatDistance(meters)}`;
+                            const midLat = (localData.lat + trackerData.lat) / 2;
+                            const midLon = (localData.lon + trackerData.lon) / 2;
+                        if (routeLine) {
+                            routeLine.setLatLngs(latlngs);
+                            } else {
+                                routeLine = L.polyline(latlngs, {color: 'yellow', weight: 3, opacity: 0.9}).addTo(map);
+                            }
+                            if (distanceTooltip) {
+                                distanceTooltip.setLatLng([midLat, midLon]).setContent(label);
+                        } else {
+                                distanceTooltip = L.tooltip({permanent: true, direction: 'center', className: 'marker-label route-label'})
+                                                    .setContent(label)
+                                                    .setLatLng([midLat, midLon])
+                                                    .addTo(map);
+                        }
+                    } else {
+                        if (routeLine) {
+                            map.removeLayer(routeLine);
+                            routeLine = null;
+                        }
+                            if (distanceTooltip) {
+                                map.removeLayer(distanceTooltip);
+                                distanceTooltip = null;
+                            }
+                    }
                 } catch (e) {
                     console.error("Failed to fetch GPS data:", e);
                 }
+            }
+
+            // Haversine distance in meters between two lat/lon points
+            function haversineDistance(lat1, lon1, lat2, lon2) {
+                const R = 6371000; // meters
+                const toRad = (v) => v * Math.PI / 180;
+                const dLat = toRad(lat2 - lat1);
+                const dLon = toRad(lon2 - lon1);
+                const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                          Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+                          Math.sin(dLon/2) * Math.sin(dLon/2);
+                const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+                return R * c;
+            }
+
+            function formatDistance(meters) {
+                if (!isFinite(meters)) return '—';
+                if (meters < 1000) return `${Math.round(meters)} m`;
+                return `${(meters/1000).toFixed(2)} km`;
             }
 
             function updateAges() {
@@ -199,7 +286,8 @@ HTML_TEMPLATE = """
 # Endpoint to serve offline tiles
 @app.route('/tiles/<int:z>/<int:x>/<int:y>.png')
 def serve_tile(z, x, y):
-    return send_from_directory('tiles', f'{z}/{x}/{y}.png')
+    tile_root = os.path.join(os.path.dirname(__file__), 'tiles')
+    return send_from_directory(tile_root, f'{z}/{x}/{y}.png')
 
 @app.route('/')
 def map_view():
@@ -220,43 +308,71 @@ def last_serial_message_api():
 
 # --- SERIAL READER THREAD ---
 def read_serial_gps():
-    local_pattern = re.compile(r"Local GPS: Latitude:\s*(-?\d+\.\d+)\s+Longitude:\s*(-?\d+\.\d+)")
-    tracker_pattern = re.compile(r"Tracker GPS: Latitude:\s*(-?\d+\.\d+)\s+Longitude:\s*(-?\d+\.\d+)\s+Altitude:\s*([\d\.]+)m\s+Fixes:\s*(\d+)")
+    # Accept integers or decimals, optional minus
+    num = r"-?\d+(?:\.\d+)?"
+    local_full_pattern = re.compile(rf"Local GPS: Latitude:\s*({num})\s+Longitude:\s*({num})\s+Altitude:\s*({num})m\s+Fixes:\s*(\d+)")
+    local_simple_pattern = re.compile(rf"Local GPS: Latitude:\s*({num})\s+Longitude:\s*({num})")
+    # Accept both 'Tracker GPS' and 'Remote GPS'
+    tracker_pattern = re.compile(rf"(?:Tracker|Remote) GPS: Latitude:\s*({num})\s+Longitude:\s*({num})\s+Altitude:\s*({num})m\s+Fixes:\s*(\d+)")
     ser = None
-    sio = None
+    def find_serial_port():
+        try:
+            ports = list_ports.comports()
+            for p in ports:
+                # Prefer obvious USB serial devices first
+                if (p.vid is not None) or ('USB' in (p.description or '').upper()):
+                    return p.device
+            # Fallback to first available port if any
+            if ports:
+                return ports[0].device
+        except Exception:
+            pass
+        # Fallback patterns for Unix-like systems
+        for pattern in ('/dev/tty.usbmodem*', '/dev/tty.usbserial*', '/dev/ttyACM*', '/dev/ttyUSB*'):
+            lst = glob.glob(pattern)
+            if lst:
+                return lst[0]
+        return None
     while True:
         if ser is None or not ser.is_open:
-            port_list = glob.glob('/dev/tty.usbmodem*')
-            if not port_list:
+            port = find_serial_port()
+            if not port:
                 print('No serial device found')
                 time.sleep(2)
                 continue
-            port = port_list[0]
             try:
                 ser = serial.Serial(port, 250000, timeout=1)
-                sio = io.TextIOWrapper(io.BufferedRWPair(ser, ser), encoding='utf-8', errors='replace', newline='\n')
                 print(f'Serial port connected: {port}')
             except Exception as e:
                 print('Serial port error:', e)
                 time.sleep(2)
                 continue
         try:
-            line = sio.readline()
-            if not line:
+            line_bytes = ser.readline()
+            if not line_bytes:
                 time.sleep(0.1)
                 continue
-            line = line.strip()
+            line = line_bytes.decode('utf-8', errors='replace').strip()
             # Skip lines that are too short to be valid
             if len(line) < 10:
                 continue
             global last_serial_message
             last_serial_message['msg'] = line
-            local_match = local_pattern.search(line)
+            local_match_full = local_full_pattern.search(line)
+            local_match_simple = local_simple_pattern.search(line)
             tracker_match = tracker_pattern.search(line)
-            if local_match:
+            if local_match_full:
                 gps_data["local"] = {
-                    "lat": float(local_match.group(1)),
-                    "lon": float(local_match.group(2)),
+                    "lat": float(local_match_full.group(1)),
+                    "lon": float(local_match_full.group(2)),
+                    "altitude": float(local_match_full.group(3)),
+                    "fixes": int(local_match_full.group(4)),
+                    "last_update": pytime.time()
+                }
+            elif local_match_simple:
+                gps_data["local"] = {
+                    "lat": float(local_match_simple.group(1)),
+                    "lon": float(local_match_simple.group(2)),
                     "last_update": pytime.time()
                 }
             elif tracker_match:
@@ -269,15 +385,10 @@ def read_serial_gps():
                 }
         except Exception as e:
             # print('Serial read error:', e)
-            # # try:
-            # #     ser.close()
-            # # except:
-            # #     pass
-            # ser = None
-            # sio = None
             time.sleep(0.05)
         time.sleep(0.1)
 
 if __name__ == '__main__':
+    # Start serial reader once; disable reloader to prevent duplicate processes holding the COM port
     threading.Thread(target=read_serial_gps, daemon=True).start()
-    app.run(debug=True, host='0.0.0.0', port=5050)
+    app.run(debug=True, host='0.0.0.0', port=5050, use_reloader=False)

@@ -133,3 +133,8 @@ int RF_Talker::mapRFPower(int8_t& power) {
   }
   return powerMapped;
 }
+
+void RF_Talker::restart() {
+  return;
+  // m_e22Module->restart(); // this is not implemented in the library
+}
